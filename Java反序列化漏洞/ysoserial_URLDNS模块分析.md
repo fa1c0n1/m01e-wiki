@@ -20,6 +20,9 @@ java -jar ysoserial.jar URLDNS "http://y8jhkk.dnslog.cn" > ~/tmp/ysoserial-urldn
 
 接着，通过传入的参数`command`，`URLDNS`调用`getObject(command)`方法获取到一个`Object`对象，该对象实际上是一个`HashMap`对象, 它的`key`是一个与传入的`http://y8jhkk.dnslog.cn`相关联的`URL`对象，它的值则是 `http://y8jhkk.dnslog.cn`
 
+![](pic/ysoserial-urldns-3_1.png)
+
+至于这里，`getObject()`方法，最后为什么要把该`URL`对象的`hashCode`的值置为`-1`，待下面讨论`URLDNS`的反序列化过程时会提到。
 ![](pic/ysoserial-urldns-4.png)
 
 最后通过 `Serializer.serialize(object, out);` 将这个`HashMap`对象序列化。
@@ -28,3 +31,46 @@ java -jar ysoserial.jar URLDNS "http://y8jhkk.dnslog.cn" > ~/tmp/ysoserial-urldn
 ![](pic/ysoserial-urldns-5.png)
 
 ### 0x02. 反序列化过程
+
+上面已经阐述了`URLDNS`模块的payload生成的原理，为什么`URLDNS`模块的payload反序列化的过程中会根据指定域名发起`DNS`请求呢？
+
+从上面的序列化过程中可知，这里`URLDNS`模块产生的序列化对象其实是一个`HashMap`对象。因此我们来看一下`HashMap`类的源码。如下图，可以看到它重写了`readObject()`方法。
+
+![](pic/ysoserial-urldns-6.png)
+
+如上代码所示，在1400-1405这几行中，是还原`HashMap`对象的过程，其中在填充键值对映射关系时，调用了`hash(key)`方法, 跟进该方法的实现：
+```java
+static final int hash(Object key) {
+    int h;
+    return (key == null) ? 0 : (h = key.hashCode()) ^ (h >>> 16);
+}
+```
+
+可以看到，实际会调用`key`的`hashCode()`方法。而此时的`key`是指定url的URL对象。
+所以继续来看`URL`类的`hashCode()`方法：
+
+![](pic/ysoserial-urldns-7.png)
+
+可以看到，当`hashCode`的值为`-1`，才会调用`URLStreamHandler`对象的`hashCode(URL url)`方法，否则直接返回。同时这也解释了为什么上面讨论序列化过程时，`URLDNS`的`getObject()`方法中，为什么要把`URL`对象的`hashCode`的值设置为`-1`。
+
+继续跟进`URLStreamHandler`类的`hashCode(URL url)`方法的实现，其中会调用`getHostAddress()`方法，
+
+![](pic/ysoserial-urldns-8.png)
+
+`getHostAddress()`方法，又会调用`InetAddress.getByName()`方法进行DNS查询。
+
+![](pic/ysoserial-urldns-9.png)
+
+#### 小结
+
+下面再回顾下`URLDNS` payload的反序列化过程：
+
+- 因为`URLDNS`模块的payload其实就是`HashMap`对象的序列化数据。而`HashMap`又重写了`readObject()`方法，因此反序列化过程便会调用`HashMap`对象的`readObject()`方法。
+
+- 在`HashMap`的`readObject()`方法中，会将序列化数据还原为`HashMap`对象，其中，会对`key`进行hash运算，即调用`hash(key)`方法，且在该方法中，会调用`key`的`hashCode()`方法，而这里的`key`其实是一个`URL`对象，所以调用的是`URL#hashCode()`。
+
+- 在`URL#hashCode()`方法中，当`hashCode`成员变量为`-1`时，会执行`URLStreamHandler#hashCode()`方法。
+
+- 在`URLStreamHandler#hashCode()`方法中，会调用`getHostAddress()`方法。
+
+- 在`getHostAddress()`方法中，会调用`InetAddress.getByName()`方法发起DNS请求。
