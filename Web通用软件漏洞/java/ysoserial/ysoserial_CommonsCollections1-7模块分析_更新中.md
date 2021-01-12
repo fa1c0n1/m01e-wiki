@@ -237,10 +237,7 @@ class User {
 
 `Ysoserial`在生成`payload`中也有使用到`javassist`类库。
 
-
-
-
-
+关于`javassist`的使用，见最下面的参考链接[3]。
 
 
 ### 利用链分析
@@ -291,6 +288,65 @@ PriorityQueue#readObject()
 
 ![](pic/ysoserial-cc2-2.png)
 
+那这里的 `_class[_transletIndex].newInstance()` 到底是什么呢？通过上图所示的函数调用堆栈可以看到，此时的`_transletIndex`的值为`0`， `_class[_transletIndex].newInstance()` 其实是一个类名为`Pwner+随机数字串`实例化后的对象。但是你通过IDEA的全局搜索，是找不到这个类的。
+
+![](pic/ysoserial-cc2-3.png)
+
+那这个类是从哪里来的呢？
+先来看`_class`这个数组的值是什么。往前看代码，发现当`_class`数组的元素填充来自于`TemplatesImpl#defineTransletClasses()`方法。
+
+![](pic/ysoserial-cc2-4.png)
+
+跟进该方法，可以看到`_class`是一个`Class`数组，且元素来自二维数组`_bytecodes`，`_bytecodes`是`TemplatesImpl`的成员变量。如代码所示，通过`TransletClassLoader#defineClass(byte[])`方法将字节数组`_bytecodes[0]`转换为一个`Class`对象，并赋值给`_class[0]`。
+
+![](pic/ysoserial-cc2-5.png)
+
+那这个`_bytecodes[0]`的字节数组是何方神圣？为什么由它转换而来的`Class`，实例化对象后便会调用`Rutime#exec()`呢？
+
+这时我们就需要回过头来看`CommonsCollections2#getObject()`方法了，它的第一行代码便是通过`Gadgets.createTemplatesImpl(command)`来获取一个`TemplatesImpl`对象。
+而`Gadgets.createTemplatesImpl(String)`方法又会去调用其重载方法，重载方法代码如下：
+
+![](pic/ysoserial-cc2-6.png)
+
+该方法主要做了以下事情：
+- 先利用`TemplatesImpl`的`Class`对象，通过默认构造方法去实例化一个`TemplatesImpl`对象。
+- 利用Java字节码类库`javassist`，在类`Gadgets.StubTransletPayload`的基础上，在它的默认构造方法上，添加用于执行命令的Java代码段。(通过`clazz.makeClassInitializer().insertAfter(cmd)`)
+- 将`Gadgets.StubTransletPayload`的类名修改为`ysoserial.Pwner+随机数字串`, 其实这一步可有可无，注释掉也不影响利用链的执行。另外，从这就能看出来，这里的类`Gadgets.StubTransletPayload`就是上面提到的`_class[0]`，也就解释了为什么它被实例化时会执行命令。
+- 将`Gadgets.StubTransletPayload`的父类设置为`AbstractTranslet`。这一步也是可有可无的，因为从类`Gadgets.StubTransletPayload`的定义可以看到，`Gadgets.StubTransletPayload`已经继承了类`AbstractTranslet`。
+- 剩下的就是利用反射来设置`TemplatesImpl`对象的一些成员变量。其中最关键的就是为`_bytes`赋值。其中，字节数组`_bytes[0]`即为前面通过`javassist`改造后的类`Gadgets.StubTransletPayload`的字节码，另一个字节数组`_bytes[1]`则为类`Gadgets.Foo`的字节码。
+
+这两个类的代码如下：
+
+```java
+public static class StubTransletPayload extends AbstractTranslet implements Serializable {
+    private static final long serialVersionUID = -5971610431559700674L;
+
+      public void transform ( DOM document, SerializationHandler[] handlers ) throws TransletException {}
+
+
+      @Override
+      public void transform ( DOM document, DTMAxisIterator iterator, SerializationHandler handler ) throws TransletException {}
+  }
+
+// required to make TemplatesImpl happy
+public static class Foo implements Serializable {
+    private static final long serialVersionUID = 8207363842866235160L;
+}
+```
+
+最后，`CommonsCollections2`的利用链如下：
+```
+PriorityQueue#readObject()
+  PriorityQueue#heapify()
+    PriorityQueue#siftdown()
+      PriorityQueue#siftDownUsingComparator()
+        TransformingComparator#compare()
+          InvokerTransformer#transform()
+            Method#invoke() //即: TemplatesImpl#newTransformer()
+              TemplatesImpl#getTransletInstance()
+                _class[_transletIndex].newInstance() //Gadgets.StubTransletPayload
+                  Runtime#exec()
+```
 
 ### 问题1
 既然`PriorityQueue`的成员变量`queue`是被`transient`关键字修饰的，为什么`queue`中的元素还是可以被序列化和反序列化?
@@ -339,9 +395,31 @@ private void readObject(java.io.ObjectInputStream s)
 原因在于`PriorityQueue#add()` 方法会对 `PriorityQueue`的成员变量`size`进行加`1`处理。
 而`PriorityQueue`在反序列化的过程中（`readObject()`->`heapify()`->`siftDown()`) 会对这个成员变量`size`的值进行判断。如果前面没有先两次`add(1)`, 那么`size`的值就是`0`，反序列化的时候不会触发利用链。
 
+### 问题3
+
+为什么类`StubTransletPayload`要继承类`AbstractTranslet`？
+
+这个问题，我原本的理解是：不需要继承`AbstractTranslet`，原因是这里只要保证`PriorityQueue`中的成员变量`queue`能被反序列化即可。经过实际测试，这里不继承`AbstractTranslet`，利用链确实也是可以执行的。
+作者可能是考虑到代码的健壮性？因为`Templates`类的`_bytes`定义上方写着一段注释：
+```java
+/**
+  * Contains the actual class definition for the translet class and
+  * any auxiliary classes.
+  */
+private byte[][] _bytecodes = null;
+```
+
+### 问题4
+
+为什么类`Gadgets.StubTransletPayload`和`Gadgets.Foo`都要实现序列化接口`Serializable`？
+暂不清楚。实测不实现`Serializable`也是可以的。
+
+
+## 0x03 CommonsCollections3
+
 
 ## Reference
 
 [1]https://www.liaoxuefeng.com/wiki/1252599548343744/1265120632401152
 [2]https://xz.aliyun.com/t/8010#toc-2
-[3]https://github.com/jboss-javassist/javassist/wiki/Tutorial-1
+[3]https://www.cnblogs.com/scy251147/p/11100961.html
