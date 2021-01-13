@@ -412,6 +412,7 @@ private byte[][] _bytecodes = null;
 ### 问题4
 
 为什么类`Gadgets.StubTransletPayload`和`Gadgets.Foo`都要实现序列化接口`Serializable`？
+
 暂不清楚。实测不实现`Serializable`也是可以的。
 
 
