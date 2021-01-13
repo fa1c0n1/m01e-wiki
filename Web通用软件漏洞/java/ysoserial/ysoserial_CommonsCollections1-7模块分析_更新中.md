@@ -399,7 +399,7 @@ private void readObject(java.io.ObjectInputStream s)
 
 为什么类`StubTransletPayload`要继承类`AbstractTranslet`？
 
-这个问题，我原本的理解是：不需要继承`AbstractTranslet`，原因是这里只要保证`PriorityQueue`中的成员变量`queue`能被反序列化即可。经过实际测试，这里不继承`AbstractTranslet`，利用链确实也是可以执行的。
+暂不清楚。经过实际测试，这里不继承`AbstractTranslet`，利用链也是可以执行的。
 作者可能是考虑到代码的健壮性？因为`Templates`类的`_bytes`定义上方写着一段注释：
 ```java
 /**
@@ -413,7 +413,8 @@ private byte[][] _bytecodes = null;
 
 为什么类`Gadgets.StubTransletPayload`和`Gadgets.Foo`都要实现序列化接口`Serializable`？
 
-暂不清楚。实测不实现`Serializable`也是可以的。
+暂不清楚。我原本的理解是：不需要继承`Serializable`。原因是这里只要保证`PriorityQueue`中的成员变量`queue`能被反序列化即可。实测不实现`Serializable`也是可以的。
+个人认为可能是考虑到`ysoserial`本就涉及到很多的序列化和反序列化操作，为了谨慎起见，所以自定义的类都尽量实现了`Serializable`接口。
 
 
 ## 0x03 CommonsCollections3
