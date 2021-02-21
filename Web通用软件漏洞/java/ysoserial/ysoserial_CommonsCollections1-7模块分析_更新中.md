@@ -419,6 +419,35 @@ private byte[][] _bytecodes = null;
 
 ## 0x03 CommonsCollections3
 
+依赖：
+```xml
+<dependency>
+  <groupId>commons-collections</groupId>
+  <artifactId>commons-collections</artifactId>
+  <version>3.1</version>
+</dependency>
+```
+
+如源码中的注释所说，`CC3`其实是`CC1`的变体，不同在于`CC3`的利用链中使用`InstantiateTransformer`类去代替`CC1`中的`InvokerTransformer`类。
+
+调试该利用链发现，流程跟`CC1`大体相同，且其中的`Gadgets.createTemplatesImpl(command)` 也在`CC2`中详细讨论了，这里不再详述。
+
+最后，`CommonsCollections3`的利用链如下：
+```
+AnnotationInvocationHandler#readObject()
+  Map(Proxy)#entrySet()
+    AnnotationInvocationHandler#invoke()
+      LazyMap#get()
+        ChainedTransformer#transform()
+          ConstantTransformer#transform()
+          InstantiateTransformer#transform()
+            TrAXFilter()
+              TemplatesImpl#newTransformer()
+                TemplatesImpl#getTransletInstance()
+                  _class[_transletIndex].newInstance() //Gadgets.StubTransletPayload
+                    Runtime#exec()
+```
+
 
 ## Reference
 
