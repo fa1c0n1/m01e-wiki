@@ -478,25 +478,58 @@ PriorityQueue#readObject()
 ```
 
 
-
-
-
-
-
-
 ## 0x05 CommonsCollections5
 
+依赖：
+```xml
+<dependency>
+  <groupId>commons-collections</groupId>
+  <artifactId>commons-collections</artifactId>
+  <version>3.1</version>
+</dependency>
+```
+`CommonsCollections5`算是`CommonsCollections1`的优化版本，在高版本的JDK8一样可以使用。利用链的不同之处在于`CC5`不需要使用Java动态代理的方式进入`AnnotationInvocationHandler#invoke()`，再进入`LazyMap#get()`从而触发利用链，而是直接在`BadAttributeValueExpException#readObject()`中便会调用`LazyMap#get()`从而触发利用链，后面的`LazyMap`利用链的流程就跟`CC1`一样了。
 
-
+最后，`CommonsCollections5`的利用链如下：
+```
+BadAttributeValueExpException#readObject()
+  TiedMapEntry#toString()
+    TiedMapEntry#getValue()
+      LazyMap#get()
+        ChainedTransformer#transform()
+        InvokerTransformer#transform()
+            Method#invoke()
+              Class#getMethod()
+          InvokerTransformer#transform()
+            Method#invoke()
+              Runtime#getRuntime()
+          InvokerTransformer#transform()
+            Method#invoke()
+              Runtime#exec()
+```
 
 ## 0x06 CommonsCollections6
 
-
+依赖：
+```xml
+<dependency>
+  <groupId>commons-collections</groupId>
+  <artifactId>commons-collections</artifactId>
+  <version>3.1</version>
+</dependency>
+```
 
 
 ## 0x07 CommonsCollections7
 
-
+依赖：
+```xml
+<dependency>
+  <groupId>commons-collections</groupId>
+  <artifactId>commons-collections</artifactId>
+  <version>3.1</version>
+</dependency>
+```
 
 
 
