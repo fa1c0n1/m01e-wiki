@@ -448,6 +448,57 @@ AnnotationInvocationHandler#readObject()
                     Runtime#exec()
 ```
 
+## 0x04 CommonsCollections4
+
+依赖：
+```xml
+<dependency>
+    <groupId>org.apache.commons</groupId>
+    <artifactId>commons-collections4</artifactId>
+    <version>4.0</version>
+</dependency>
+```
+
+如源码注释所说，`CC4`其实是`CC2`的变体，不同在于`CC4`的利用链中使用`InstantiateTransformer`类去替代`InvokerTransformer`类。且其中的`Gadgets.createTemplatesImpl(command)` 也在`CC2`中详细讨论了，这里不再详述。
+
+最后，`CommonsCollections4`的利用链如下：
+```
+PriorityQueue#readObject()
+  PriorityQueue#heapify()
+    PriorityQueue#siftdown()
+      PriorityQueue#siftDownUsingComparator()
+        TransformingComparator#compare()
+          ChainedTransformer#transform()
+          InstantiateTransformer#transform()
+            TrAXFilter()
+              TemplatesImpl#newTransformer()
+                TemplatesImpl#getTransletInstance()
+                  _class[_transletIndex].newInstance() //Gadgets.StubTransletPayload
+                    Runtime#exec() 
+```
+
+
+
+
+
+
+
+
+## 0x05 CommonsCollections5
+
+
+
+
+## 0x06 CommonsCollections6
+
+
+
+
+## 0x07 CommonsCollections7
+
+
+
+
 
 ## Reference
 
