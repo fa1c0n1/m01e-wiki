@@ -488,7 +488,7 @@ PriorityQueue#readObject()
   <version>3.1</version>
 </dependency>
 ```
-`CommonsCollections5`算是`CommonsCollections1`的优化版本，在高版本的JDK8一样可以使用。利用链的不同之处在于`CC5`不需要使用Java动态代理的方式进入`AnnotationInvocationHandler#invoke()`，再进入`LazyMap#get()`从而触发利用链，而是直接在`BadAttributeValueExpException#readObject()`中便会调用`LazyMap#get()`从而触发利用链，后面的`LazyMap`利用链的流程就跟`CC1`一样了。
+`CommonsCollections5`是`commons-collections:3.1`的另一条利用链，`算是`CommonsCollections1`的优化版本，在高版本的JDK8一样可以使用。利用链的不同之处在于`CC5`不需要使用Java动态代理的方式进入`AnnotationInvocationHandler#invoke()`，再进入`LazyMap#get()`从而触发利用链，而是直接在`BadAttributeValueExpException#readObject()`中便会调用`LazyMap#get()`从而触发利用链，后面的`LazyMap`利用链的流程就跟`CC1`一样了。
 
 最后，`CommonsCollections5`的利用链如下：
 ```
@@ -519,6 +519,30 @@ BadAttributeValueExpException#readObject()
 </dependency>
 ```
 
+`CommonsCollections6`是`commons-collections:3.1`的另一条利用链，在高版本的JDK8一样可以使用。
+
+`CommonsCollections6`也是`CommonsCollection1`的优化版本，在高版本的JDK8也可以使用。`CC6`和`CC5`一样，也不需要使用动态代理的方式去进入`LazyMap#get()`的流程，而是通过`HashSet#readObject()`进入`LazyMap#get()`的流程，进入`LazyMap#get()`后，流程就跟`CC1`一样了。
+
+最后，`CommonsCollections6`的利用链如下：
+```
+HashSet#readObject()
+  HashMap#put()
+    HashMap#hash()
+      TiedMapEntry#hashCode()
+        TiedMapEntry#getValue()
+          LazyMap#get()
+            ChainedTransformer#transform()
+            InvokerTransformer#transform()
+              Method#invoke()
+                Class#getMethod()
+            InvokerTransformer#transform()
+              Method#invoke()
+                Runtime#getRuntime()
+            InvokerTransformer#transform()
+              Method#invoke()
+                Runtime#exec()
+```
+
 
 ## 0x07 CommonsCollections7
 
@@ -531,7 +555,28 @@ BadAttributeValueExpException#readObject()
 </dependency>
 ```
 
+`CommonsCollections7`是`commons-collections:3.1`的另一条利用链，在高版本的JDK8一样可以使用。
 
+`CommonsCollections7`也是`CommonsCollection1`的优化版本，在高版本的JDK8也可以使用。`CC7`和`CC5`一样，也不需要使用动态代理的方式去进入`LazyMap#get()`的流程，而是通过`Hashtable#readObject()`进入`LazyMap#get()`的流程，进入`LazyMap#get()`后，流程就跟`CC1`一样了。
+
+最后，`CommonsCollections7`的利用链如下：
+```
+Hashtable#readObject()
+  Hashtable#reconstitutionPut()
+    AbstractMapDecorator#equals()
+      AbstractMap#equals()
+        LazyMap#get()
+          ChainedTransformer#transform()
+          InvokerTransformer#transform()
+            Method#invoke()
+              Class#getMethod()
+          InvokerTransformer#transform()
+            Method#invoke()
+              Runtime#getRuntime()
+          InvokerTransformer#transform()
+            Method#invoke()
+              Runtime#exec() 
+```
 
 ## Reference
 
