@@ -42,22 +42,25 @@
 
 优先复现并分析一下Orange的那个phpwind的漏洞（结合了`web`+`bin`的一个很经典的红队案例），链接：https://www.bilibili.com/video/BV1wX4y1K7W4
 
-# Python
-
-与Java同理。
-具体后续研究到的时候再写。
-
-
-# Nodejs
-
-与Java同理。
-具体后续研究到的时候再写。
 
 # Golang
 
 与Java同理。
 具体后续研究到的时候再写。
 
+围绕云原生生态的应用软件漏洞去研究，比如下面两个链接提到的：
+https://mp.weixin.qq.com/s/X04IhY9Oau-kDOVbok8wEw
+https://mp.weixin.qq.com/s/Aq8RrH34PTkmF8lKzdY38g
+
+# Python
+
+与Java同理。
+具体后续研究到的时候再写。
+
+# Nodejs
+
+与Java同理。
+具体后续研究到的时候再写。
 
 # Reference
 [1] [安全研究者的自我修养（完整版）](https://paper.seebug.org/789/)
