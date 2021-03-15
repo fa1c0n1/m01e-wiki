@@ -34,7 +34,6 @@
 
 但并没有对上传的文件名的后缀进行白名单校验，故在文件头4个字节设置为`jpg`对应的4个字节的便可绕过校验。如下：
 
-
 ![](pic/java-code-audit-case-1_6.png)
 
 ![](pic/java-code-audit-case-1_7.jpg)
