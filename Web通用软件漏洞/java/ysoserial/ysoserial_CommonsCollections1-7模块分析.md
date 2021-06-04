@@ -1,9 +1,22 @@
 # ysoserial CommonsCollections1-7模块分析
 
+## 目录
+
+- [0x00 前言](#preface)
+- [0x01 CommonsCollections1](#cc1)
+- [0x02 CommonsCollections2](#cc2)
+- [0x03 CommonsCollections3](#cc3)
+- [0x04 CommonsCollections4](#cc4)
+- [0x05 CommonsCollections5](#cc5)
+- [0x06 CommonsCollections6](#cc6)
+- [0x07 CommonsCollections7](#cc7)
+
+<a name="preface"></a>
 ## 0x00 前言
 
 `ysoserial`中的`CommonsCollections`系列模块，是在实际的Java反序列化漏洞利用中被用到比较多的模块。
 
+<a name="cc1"></a>
 ## 0x01 CommonsCollections1
 
 依赖：
@@ -142,6 +155,7 @@ AnnotationInvocationHandler#readObject()
               Runtime#exec()
 ```
 
+<a name="cc2"></a>
 ## 0x02 CommonsCollections2
 
 依赖：
@@ -417,6 +431,7 @@ private byte[][] _bytecodes = null;
 个人认为可能是考虑到`ysoserial`本就涉及到很多的序列化和反序列化操作，为了谨慎起见，所以自定义的类都尽量实现了`Serializable`接口。
 
 
+<a name="cc3"></a>
 ## 0x03 CommonsCollections3
 
 依赖：
@@ -448,6 +463,7 @@ AnnotationInvocationHandler#readObject()
                     Runtime#exec()
 ```
 
+<a name="cc4"></a>
 ## 0x04 CommonsCollections4
 
 依赖：
@@ -477,7 +493,7 @@ PriorityQueue#readObject()
                     Runtime#exec() 
 ```
 
-
+<a name="cc5"></a>
 ## 0x05 CommonsCollections5
 
 依赖：
@@ -508,6 +524,7 @@ BadAttributeValueExpException#readObject()
               Runtime#exec()
 ```
 
+<a name="cc6"></a>
 ## 0x06 CommonsCollections6
 
 依赖：
@@ -543,7 +560,7 @@ HashSet#readObject()
                 Runtime#exec()
 ```
 
-
+<a name="cc7"></a>
 ## 0x07 CommonsCollections7
 
 依赖：
