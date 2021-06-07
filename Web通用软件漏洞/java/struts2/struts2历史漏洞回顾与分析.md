@@ -40,7 +40,7 @@ https://cwiki.apache.org/confluence/display/WW/S2-001
 
 这里先使用最简单的`PoC`进行调试：`%{2+5}`
 
-<img src="pic/struts2_s2-001_1.png" width="50%" heigh="50%">
+<img src="pic/struts2_s2-001_1.png" style="zoom:50%">
 
 Submit提交后，OGNL表达式返回结果并填充在`textfield`文本框中：
 
