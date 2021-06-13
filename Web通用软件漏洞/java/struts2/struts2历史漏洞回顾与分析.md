@@ -42,32 +42,32 @@ https://cwiki.apache.org/confluence/display/WW/S2-001
 
 这里先使用最简单的`PoC`进行调试：`%{2+5}`
 
-<img src="pic/struts2_s2-001_1.png" width="60%" heigh="60%">
+<img src="pic/struts2_s2-001_1.png">
 
 Submit提交后，OGNL表达式返回结果并填充在`textfield`文本框中：
 
-<img src="pic/struts2_s2-001_2.png" width="60%" heigh="60%">
+<img src="pic/struts2_s2-001_2.png">
 
 下面就来调试分析一下。<br>
 由于漏洞是在struts2对文本标签`<s:textfield>`处理的过程中触发的，所以先找到相对应的处理类。在IDEA里，对着`<s:textfield>`处点击便可定位到文件`struts-tags.tld`，其中可看到该标签相关的一些属性定义，包括该标签的对应的处理类为：`org.apache.struts2.views.jsp.ui.TextFieldTag`。
 
-<img src="pic/struts2_s2-001_3.png" width="60%" heigh="60%">
+<img src="pic/struts2_s2-001_3.png">
 
 在该类中搜索处理开始标签和结束标签的方法，发现其使用的是父类`ComponentTagSupport`的处理方法：`doStarTag`和`doEndTag`。
 
-<img src="pic/struts2_s2-001_4.png" width="60%" heigh="60%">
+<img src="pic/struts2_s2-001_4.png">
 
 在这两个方法中下断点。经调试发现，触发漏洞是在`doEndTag`方法中。因此，当当前标签时`TextField`类型时，单步跟进调试。
 
-<img src="pic/struts2_s2-001_5.png" width="60%" heigh="60%">
+<img src="pic/struts2_s2-001_5.png">
 
 调试进入`UIBean#evaluateParams()`方法中，当请求的参数中`value`为null时，则会根据`name`属性的值去获取对应的`value`属性的值。且`altSyntax`特性默认是开启的(该属性设置在struts2的文件`default.properties`中)，所以这里会用`OGNL`表达式的标识符`%{}`把`name`属性的值包住，比如当前表单的用户名文本输入框中，`name`属性的值为`username`，则加了`OGNL`表达式标识符后变为：`%{username}`，如下图：
 
-<img src="pic/struts2_s2-001_6.png" width="60%" heigh="60%">
+<img src="pic/struts2_s2-001_6.png">
 
 继续跟进`findValue()`方法，后面会进入到`TextParserUtil#translateVariables()`方法中，如下图：
 
-<img src="pic/struts2_s2-001_7.png" width="60%" heigh="60%">
+<img src="pic/struts2_s2-001_7.png">
 
 在`TextParserUtil#translateVariables()`方法中，有一个`while(true)`循环，这里会调用`OgnlValueStack#findValue()`方法来计算`OGNL`表达式(其实底层调用的还是`OGNL`的API)计算。<br>
 计算`%{username}`，截取`%{}`里面的内容`username`，会从值栈ValueStack的`Root`对象中获取key为`username`的值，即`%{2+5}`。由于获取到的值`%{2+5}`仍然是一个`OGNL`表达式，故会再次进行计算，此时便是计算`2+5`得到值`7`。
@@ -80,12 +80,12 @@ Submit提交后，OGNL表达式返回结果并填充在`textfield`文本框中�
 由于比较好奇这里为什么表单文本框的内容提交后`OGNL`表达式的计算结果会以替换文本输入框内容的方式进行回显。于是便进一步调试。
 发现在`UIBean#evaluateParams()`计算完成后，会进入`UIBean#mergeTemplate()`方法构造一个页面返回到客户端。跟进该方法，如下图：
 
-<img src="pic/struts2_s2-001_8.png" width="60%" heigh="60%">
+<img src="pic/struts2_s2-001_8.png">
 
 可看到该方法中使用了模板引擎Freemarker进行页面的构造，这里主要先针对用户名的文本框进行构造，所需参数由`getParameters()`方法返回，返回的值里就包含了上面OGNL表达式`%{2+5}`的计算结果`7`，保存在`key`为`nameValue`的值中。<br>
 再来看看此时使用的模板`template`参数的值`/template/xhtml/text`，最后定位到具体的模板文件`/template/simple/text.ftl`，内容如下图：
 
-<img src="pic/struts2_s2-001_9.png" width="60%" heigh="60%">
+<img src="pic/struts2_s2-001_9.png">
 
 这就一目了然了：这里会判断参数`parameters`中的`nameValue`的值是否存在，存在的话便填充到该文本输入框的`value`属性中。
 
@@ -93,7 +93,7 @@ Submit提交后，OGNL表达式返回结果并填充在`textfield`文本框中�
 
 这里使用OGNL上下文对象`context`去获取`HttpServletResponse`对象，如下图：
 
-<img src="pic/struts2_s2-001_10.png" width="60%" heigh="60%">
+<img src="pic/struts2_s2-001_10.png">
 
 于是有：
 ```java
@@ -109,13 +109,13 @@ Submit提交后，OGNL表达式返回结果并填充在`textfield`文本框中�
 #writer.close()}
 ```
 
-<img src="pic/struts2_s2-001_12.png" width="60%" heigh="60%">
+<img src="pic/struts2_s2-001_12.png">
 
 ## 漏洞修复
 
 在struts2 `2.0.9`版本中，依赖的XWork的版本为`2.0.4`，在该版本中，`com.opensymphony.xwork2.util.TextParseUtil#translateVariables()` 判断循环的次数，如果超过`1`次，就退出`while(true)`循环体，从而避免`OGNL`表达式的递归执行，如下图所示。
 
-<img src="pic/struts2_s2-001_11.png" width="60%" heigh="60%">
+<img src="pic/struts2_s2-001_11.png">
 
 换言之，在处理完`%{username}`后，就不能对获取到的值再进行OGNL表达式计算了。
 
@@ -141,21 +141,21 @@ https://cwiki.apache.org/confluence/display/WW/S2-003
 >
 >关于OGNL中`MethodAccessor`的知识点这里不详细讨论，请参考陆舟的《Struts2技术内幕》一书中第6章的6.3小节。
 
-<img src="pic/struts2_s2-003_1.png" width="60%" heigh="60%">
+<img src="pic/struts2_s2-003_1.png">
 
 继续跟进`ParametersInterceptor#setParameters()`方法，里面会调用`ParametersInterceptor#acceptableName()`对参数名进行安全校验，即是否包含特殊字符`=,#:`。如果没有包含指定字符，则继续执行，会调用`OgnlValueStack#setValue()`对参数名进行OGNL表达式计算。
 
-<img src="pic/struts2_s2-003_2.png" width="60%" heigh="60%">
+<img src="pic/struts2_s2-003_2.png">
 
-<img src="pic/struts2_s2-003_3.png" width="60%" heigh="60%">
+<img src="pic/struts2_s2-003_3.png">
 
 继续跟进，会调用`OgnlUtil#compile()`方法，当首次请求时，`expressions`这个`HashMap`集合中没有以当前表达式作为`key`的`value`，所以会调用`Ognl#parseExpression()`解析当前表达式，而解析后的结果存放到`expressions`这个`HashMap`集合中。
 
-<img src="pic/struts2_s2-003_4.png" width="60%" heigh="60%">
+<img src="pic/struts2_s2-003_4.png">
 
 而`Ognl#parseExpression()`的解析过程中，后面会调用`JavaCharStream#readChar()`，该方法中，会对unicode编码转化为ASCII码字符。比如`\u0023`会转化为`#`。如下图：
 
-<img src="pic/struts2_s2-003_5.png" width="60%" heigh="60%">
+<img src="pic/struts2_s2-003_5.png">
 
 综上，我们就可以将OGNL表达式中的特殊符号`=,#:`进行unicode编码后再发送，便可绕过`acceptableName()`方法的过滤。另外，再利用OGNL表达式的`Expression Evaluation`特性来编写PoC。
 >说到OGNL的`Expression Evaluation`特性，它支持`(expr)`、`(expr1)(expr2)`或`(expr1)(expr2)(expr3)`这样的写法。<br>
@@ -204,7 +204,7 @@ https://cwiki.apache.org/confluence/display/WW/S2-003
 &(i)(%5cu0023writer.close())(bla)
 ```
 
-<img src="pic/struts2_s2-003_6.png" width="80%" heigh="80%">
+<img src="pic/struts2_s2-003_6.png">
 
 当然，这里用两个括号的形式也是可以的，但是无论用哪种，Java代码一定要放在第二个括号里，第一个括号里的用来决定表达式的执行顺序。因为在`ParametersInterceptor#setParameters()`方法中会把所有的url请求参数放在一个`TreeMap`里,且作为`key`进行存放。而`TreeMap`默认是会按照`key`进行字典排序的。所以如果要让PoC里所有的表达式都按照指定的先后顺序执行的话，必须使用第一个括号进行排序。比如上面回显PoC里第一个表达式先后依次就是`(a)`->`(b)`->`(c)`->`(d)`->`(e)`->`(f)`->`(g)`->`(h)`->`(i)`。
 
