@@ -212,8 +212,38 @@ https://cwiki.apache.org/confluence/display/WW/S2-003
 
 ## 漏洞修复
 
+Struts2 `2.0.12`版本，依赖的XWork版本是`2.0.6`。通过比对XWork`2.0.6`和`2.0.5`版本的源码的不同，发现在类`OgnlValueStack`中使用了`SecurityMemberAccess`去替代`StaticMemberAccess`。
 
+<img src="pic/struts2_s2-003_7.png">
 
+类`OgnlValueStack`还因实现了新接口`MemberAccessValueStack`而实现了其两个方法：
+
+<img src="pic/struts2_s2-003_8.png">
+
+而这两个方法在`ParametersInterceptor#setParameters()`方法中被调用：
+
+<img src="pic/struts2_s2-003_9.png">
+
+**那么`SecurityMemberAccess`这个类是如何起到防护作用的呢？**<br>
+跟踪代码到最后OGNL表达式中如果有Java方法被调用的话，最终会调用`OgnlRuntime#callAppropriateMethod()`方法，里面有个`isMethodAccessible()`方法的判断：
+
+<img src="pic/struts2_s2-003_10.png">
+
+从上图代码可知，`isMethodAccessible()`方法一定要返回`true`，才能继续往下走从而通过反射调用我们的Java方法，否则抛异常`NoSuchMethodException`。
+
+继续跟进`isMethodAccessible()`，发现最终会调用`SecurityMemberAccess#isAcceptableProperty()`方法进行判断, 该方法要返回`true`才可以, 其实现如下:
+
+<img src="pic/struts2_s2-003_11.png">
+
+<img src="pic/struts2_s2-003_13.png">
+
+很明显，需要`isAccepted()`返回`true`并且`isExcluded(name)`返回`false`才行。
+
+而`isAccepted()`和`isExcluded()`的返回值取决于`SecurityMemberAccess`的两个属性：`acceptProperties`和`excludeProperties`。这两个属性的赋值前面提到，是在`ParametersInterceptor#setParameters()`方法中，其对应的值是`ParametersInterceptor`的两个属性`acceptParams`和`excludeParams`。通过阅读代码可知，`acceptParams`是一个空的集合，而`excludeParams`这个集合由于interceptord的配置文件中`ParametersInterceptor`的配置了该属性的初始值所以并不是空集合。其实这两个属性的值也可以通过调试可知。
+
+<img src="pic/struts2_s2-003_12.png">
+
+所以`isAccepted()`是会返回`true`的，而`isExcluded()`也返回了`true`从而导致无法执行Java方法。
 
 <a name="s2-005"></a>
 ## S2-005
