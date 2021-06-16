@@ -418,6 +418,10 @@ TextFieldTag#doEndTag()
 
 其中，在`OgnlValueStack#lookupForOverrides()`方法中会取出当前值栈的`overrides`属性，该属性中存放了前面类型转化失败的入参，也就是文本框中输入的内容。取出来后进行OGNL表达式计算。
 
+<img src="pic/struts2_s2-007_9.png">
+
+<img src="pic/struts2_s2-007_10.png">
+
 至此，该漏洞的原理分析完了。
 
 ### 可回显PoC
@@ -436,6 +440,8 @@ TextFieldTag#doEndTag()
 #writer.close()
 ) + '
 ```
+
+<img src="pic/struts2_s2-007_11.png">
 
 ## 漏洞修复
 
