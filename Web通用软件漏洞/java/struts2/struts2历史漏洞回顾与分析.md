@@ -360,6 +360,8 @@ https://cwiki.apache.org/confluence/display/WW/S2-007
 
 从漏洞公告中可获悉漏洞出现在struts2的默认拦截器`com.opensymphony.xwork2.interceptor.ConversionErrorInterceptor`的`getOverrideExpr()`方法中：
 
+>但经调试发现,实际上调用的是其子类`StrutsConversionErrorInterceptor`的`getOverrideExpr()`方法。
+
 <img src="pic/struts2_s2-007_3.png">
 
 如上图，该方法返回`"'" + value + "'"`。结合给出的PoC，很容易可猜想到，该方法会将文本输入框中提交过来的字符串用单引号`'`包裹上，原因应该是为了防止OGNL表达式的执行。很明显，可构造输入将这里的单引号`'`左右都进行闭合，便可以绕过防护。
@@ -434,7 +436,7 @@ TextFieldTag#doEndTag()
 #br=new java.io.BufferedReader(new java.io.InputStreamReader(#ret.getInputStream())),
 #res=new char[20000],
 #br.read(#res),
-#writer=#context.get("com.opensymphony.xwork2.dispatcher.HttpServletResponse").getWriter(),
+#writer=#context.get('com.opensymphony.xwork2.dispatcher.HttpServletResponse').getWriter(),
 #writer.println(new java.lang.String(#res)),
 #writer.flush(),
 #writer.close()
@@ -443,8 +445,16 @@ TextFieldTag#doEndTag()
 
 <img src="pic/struts2_s2-007_11.png">
 
+
 ## 漏洞修复
 
+Struts2 `2.2.3.1`版本，依赖的XWork的版本也是`2.2.3.1`，在默认拦截器`org.apache.struts2.interceptor.StrutsConversionErrorInterceptor`的`getOverrideExpr()`方法中进行了修复。
+
+<img src="pic/struts2_s2-007_12.png">
+
+<img src="pic/struts2_s2-007_13.png">
+
+如上图所示，对输入字符串中的双引号进行了转义后，再用双引号将其包裹。从而避免了输入字符串中的双引号闭合左右两边的双引号。
 
 <a name="s2-008"></a>
 ## S2-008
