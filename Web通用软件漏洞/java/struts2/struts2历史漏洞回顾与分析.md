@@ -458,11 +458,44 @@ Struts2 `2.2.3.1`版本，依赖的XWork的版本也是`2.2.3.1`，在默认拦�
 <a name="s2-008"></a>
 ## S2-008
 
+官方漏洞公告：
+https://cwiki.apache.org/confluence/display/WW/S2-008
+
+影响版本：Struts 2.0.0 - Struts 2.3.1
+
+从漏洞公告可知，`S2-008`一共4个漏洞。第一个漏洞与`S2-007`漏洞点类似，故不再关注。这里只关注能直接RCE的第`2`个和第`4`个漏洞。
+
+- 1、**Remote command execution in CookieInterceptor**
+- 2、 **Remote command execution in DebuggingInterceptor**
+
 ## 漏洞复现与分析
 
+### vuln-1：Remote command execution in CookieInterceptor
+
+拦截器`CookieInterceptor`在struts2中默认是不开启的。需要在应用的`struts.xml`配置文件中手动开启，且要配置参数才行，如下图：
+
+<img src="pic/struts2_s2-008_1.png">
+
+其实该漏洞跟`S2-005`类似，是因为在`CookieInterceptor`拦截器中没有对`cookie`进行合法性校验从而导致了可以在`cookie`的键`key`位置注入恶意的OGNL表达式。
+
+<img src="pic/struts2_s2-008_2.png">
+
+<img src="pic/struts2_s2-008_5.png">
+
+然而主流Web容器比如Tomcat，会对`cookie`的名称有字符限制，一些关键字符无法使用使得这个漏洞点显得比较鸡肋。
+
+尽管如此，在后续的修复版本中，还是在`CookieInterceptor`中增加了正则表达式进行字符白名单匹配。
+
+<img src="pic/struts2_s2-008_3.png">
+
+<img src="pic/struts2_s2-008_4.png">
 
 
-### 可回显PoC
+### vuln-2：Remote command execution in DebuggingInterceptor
+
+
+
+### vuln-2：可回显PoC
 
 
 
