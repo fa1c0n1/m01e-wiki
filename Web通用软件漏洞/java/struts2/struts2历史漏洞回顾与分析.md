@@ -463,7 +463,7 @@ https://cwiki.apache.org/confluence/display/WW/S2-008
 
 影响版本：Struts 2.0.0 - Struts 2.3.1
 
-从漏洞公告可知，`S2-008`一共4个漏洞。第一个漏洞与`S2-007`漏洞点类似，故不再关注。这里只关注能直接RCE的第`2`个和第`4`个漏洞。
+从漏洞公告可知，`S2-008`一共4个漏洞。第一个漏洞与`S2-007`漏洞点类似，故不再关注。这里只关注能RCE类型的第`2`个和第`4`个漏洞。
 
 - 1、**Remote command execution in CookieInterceptor**
 - 2、 **Remote command execution in DebuggingInterceptor**
@@ -493,6 +493,7 @@ https://cwiki.apache.org/confluence/display/WW/S2-008
 
 ### vuln-2：Remote command execution in DebuggingInterceptor
 
+该漏洞的前提条件
 
 
 ### vuln-2：可回显PoC
