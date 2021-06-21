@@ -666,7 +666,7 @@ https://cwiki.apache.org/confluence/display/WW/S2-012
 #writer.close()}
 ```
 
-<img src="pic/struts2_s2-012_21.png">
+<img src="pic/struts2_s2-012_9.png">
 
 如果要使用`Runtime#exec()`方法来执行命令也可以，不过要添加`#_memberAccess.allowStaticMethodAccess=true`。前面使用`ProcessBuilder#start()`，由于不需要调用静态方法，所以无需先将`SecurityMemberAccess`的`allowStaticMethodAccess`改为`true`。
 ```
@@ -683,11 +683,14 @@ https://cwiki.apache.org/confluence/display/WW/S2-012
 #f.getWriter().close()}
 ```
 
-<img src="pic/struts2_s2-012_20.png">
-
-
+<img src="pic/struts2_s2-012_8.png">
 
 ## 漏洞修复
+
+根据漏洞公告中提到的修复方案，是讲`OgnlUtil`这个类改为默认情况下不允许进行表达式求值。
+如代码所示，`OgnlUtil#compile()`方法中加了这样一个判断，而`enableEvalExpression`默认为`false`。
+
+<img src="pic/struts2_s2-012_7.png">
 
 
 <a name="s2-013"></a>
