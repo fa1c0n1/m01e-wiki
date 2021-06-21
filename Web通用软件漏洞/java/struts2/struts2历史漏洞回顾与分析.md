@@ -687,7 +687,7 @@ https://cwiki.apache.org/confluence/display/WW/S2-012
 
 ## 漏洞修复
 
-根据漏洞公告中提到的修复方案，是讲`OgnlUtil`这个类改为默认情况下不允许进行表达式求值。
+根据漏洞公告中提到的修复方案，是将`OgnlUtil`这个类改为默认情况下不允许进行表达式求值。
 如代码所示，`OgnlUtil#compile()`方法中加了这样一个判断，而`enableEvalExpression`默认为`false`。
 
 <img src="pic/struts2_s2-012_7.png">
