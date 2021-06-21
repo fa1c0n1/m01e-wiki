@@ -613,7 +613,7 @@ Struts2 `2.3.1.2`版本，依赖的XWork版本也是`2.3.1.2`，在拦截器`Par
 官方漏洞公告：<br>
 https://cwiki.apache.org/confluence/display/WW/S2-012
 
-影响版本：Struts 2.0.0 - Struts 2.3.14.2
+影响版本：`Struts 2.0.0` - `Struts 2.3.14.2`
 
 ## 漏洞复现与分析
 
