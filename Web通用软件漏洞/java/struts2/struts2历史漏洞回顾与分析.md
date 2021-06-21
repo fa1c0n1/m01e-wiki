@@ -685,9 +685,6 @@ https://cwiki.apache.org/confluence/display/WW/S2-012
 
 <img src="pic/struts2_s2-012_20.png">
 
-或直接用`ProcessBuilder#start()`来代替`Runtime#exec()`方法。
-使用`ProcessBuilder#start()`的话，由于不需要调用静态方法，所以无需先将`SecurityMemberAccess`的`allowStaticMethodAccess`改为`true`。
-
 
 
 ## 漏洞修复
