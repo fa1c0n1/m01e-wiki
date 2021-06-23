@@ -750,7 +750,6 @@ https://cwiki.apache.org/confluence/display/WW/S2-013
 
 <img src="pic/struts2_s2-013_2.png">
 
-
 <a name="s2-015"></a>
 ## S2-015
 
