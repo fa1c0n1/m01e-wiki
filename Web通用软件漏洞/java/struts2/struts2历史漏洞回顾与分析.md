@@ -718,9 +718,13 @@ https://cwiki.apache.org/confluence/display/WW/S2-013
 
 跟之前`S2-001`一样，找到`<s:url>`对应的类`URLTag`，在`doEndTag()`方法中下断点进行调试。
 
-在关键的地方，即执行OGNL表达式计算的类和方法，比如`OgnlValueStack#findValue()`下断点，一路跟下去，发现在处理url参数的过程中，会调用`TextParseUtil#translateVariables()`，后面的漏洞触发流程就跟`S2-012`一样了。
+在关键的地方，即执行OGNL表达式计算的类和方法，比如`OgnlValueStack#findValue()`下断点，一路跟下去，发现在处理url参数的过程中，`DefaultUrlHelper#buildParameterSubstring()`会调用`TextParseUtil#translateVariables()`，如下图：
 
-所以这个漏洞其实没什么值得说道的地方，因为跟之前出现的漏洞类似。
+<img src="pic/struts2_s2-013_3.png">
+
+<img src="pic/struts2_s2-013_4.png">
+
+后面的漏洞触发流程就跟`S2-012`一样了。所以这个漏洞其实没什么值得说道的地方，因为跟之前出现的漏洞类似。
 
 ### 可回显PoC
 
@@ -741,6 +745,10 @@ https://cwiki.apache.org/confluence/display/WW/S2-013
 <img src="pic/struts2_s2-013_20.png">
 
 ## 漏洞修复
+
+在Struts2的`2.3.14.2`版本中，`DefaultUrlHelper#buildParameterSubstring()`没有再调用`TextParseUtil.translateVariables()`对参数进行处理了。如下图：
+
+<img src="pic/struts2_s2-013_2.png">
 
 
 <a name="s2-015"></a>
