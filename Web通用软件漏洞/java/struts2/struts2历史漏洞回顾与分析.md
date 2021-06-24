@@ -805,7 +805,7 @@ https://cwiki.apache.org/confluence/display/WW/S2-013
 
 ### vuln-2：Double evaluation of an expression
 
-有`ParamAction`定义如下图，在该`action`中定义了`message`属性以及`set`/`get`方法。在`struts.xml`中还定义了`success`返回时的方式，使用了`${message}`引用去`message`属性的值。
+有`ParamAction`定义如下图，在该`action`中定义了`message`属性以及`set`/`get`方法。在`struts.xml`中还定义了`success`返回时的方式，使用了`${message}`去引用`message`属性的值。
 
 <img src="pic/struts2_s2-015_7.png">
 
