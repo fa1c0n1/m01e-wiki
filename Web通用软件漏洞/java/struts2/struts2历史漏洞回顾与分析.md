@@ -838,7 +838,7 @@ https://cwiki.apache.org/confluence/display/WW/S2-013
 
 ### 针对 vuln-2：Double evaluation of an expression 的漏洞修复
 
-通过比对代码发现`2.3.14.3`版本里，`OgnlTextParser.java#evaluate()`方法里，将位置索引值`pos`的初始化移到了`for`循环之前。这样修改，使得第一次OGNL表达式计算后，起始位置`pos`的值会更新，而不会重新置`0`，从而避免了二次计算OGNL表达式。<br>
+通过比对代码，发现在`2.3.14.3`版本的`OgnlTextParser.java#evaluate()`方法里，将位置索引值`pos`的初始化移到了`for`循环之前。这样修改，使得第一次OGNL表达式计算后，起始位置`pos`的值会更新，而不会重新置`0`，从而避免了二次计算OGNL表达式。<br>
 **注：** <br>
 **另外，这也是`S2-012`的修复，之前写`S2-012`漏洞分析的文章里，把修复方式给写错了!！**
 
