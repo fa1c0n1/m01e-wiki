@@ -805,9 +805,26 @@ https://cwiki.apache.org/confluence/display/WW/S2-013
 
 ### vuln-2：Double evaluation of an expression
 
+有`ParamAction`定义如下图，在该`action`中定义了`message`属性以及`set`/`get`方法。在`struts.xml`中还定义了`success`返回时的方式，使用了`${message}`引用去`message`属性的值。
 
+<img src="pic/struts2_s2-015_7.png">
+
+<img src="pic/struts2_s2-015_8.png">
+
+其实这个漏洞本质上与`S2-012`是一样的，也是在定义`Result`的行为时，引用了`Action`的属性值，而Struts2在调度`Result`对象的过程中，会对`Action`的属性引用值进行二次OGNL表达式计算，从而导致可RCE。
+
+因为是`result`的类型是`httpheader`，所以实际调度的`Result`对象其实是`HttpHeaderResult`对象。
+
+<img src="pic/struts2_s2-015_9.png">
+
+然后在`HttpHeaderResult#execute()`方法中，会将参数`fxxk`的值`${message}`传入`TextParseUtil#translateVariables()`进行OGNL表达式求值，后面的方法调用栈就和`S2-012`一样了，就不再详细说了：第一次先计算`${message}`，得到我们传入的OGNL表达式`%{xxxyyyzzz...}`。第二次则计算`%{xxxyyyzzz...}`并得到结果，并在响应头`fxxk`中显示。
+
+<img src="pic/struts2_s2-015_10.png">
 
 ### vuln-2 可回显PoC
+
+<img src="pic/struts2_s2-015_11.png">
+
 
 
 
