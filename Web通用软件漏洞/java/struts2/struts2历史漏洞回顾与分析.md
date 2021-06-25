@@ -844,19 +844,81 @@ https://cwiki.apache.org/confluence/display/WW/S2-013
 
 <img src="pic/struts2_s2-015_14.png">
 
-
 <a name="s2-016"></a>
 ## S2-016
 
+官方漏洞公告：https://cwiki.apache.org/confluence/display/WW/S2-016
+
+影响版本：`Struts 2.0.0` - `Struts 2.3.15`
+
 ## 漏洞复现与分析
 
+在Struts2中，支持在`action`的请求参数中添加`redirect:`、`redirectAction:`前缀，在后面加上指定表达式，便可实现路径导航和重定向。但由于没有对前缀后面的表达式进行安全过滤，从而可导致注入任意OGNL表达式而RCE。
 
+下面使用struts2 `2.3.15`版本自带的示例程序`struts-blank`进行调试分析。
+以`redirect:`为例，最简单的PoC`redirect:%{11+13}`，复现如下：
+
+<img src="pic/struts2_s2-016_3.png">
+
+可以看到表达式`%{11+13}`被执行了，结果回显在了响应头`Location`中。
+
+对这些参数前缀的处理，是在`org.apache.struts2.dispatcher.mapper.DefaultActionMapper`类中，如下图，每个前缀都有与之对应的处理动作。
+
+<img src="pic/struts2_s2-016_1.png">
+
+下面以`redirect:`前缀为例子。
+
+先说一下，这个漏洞的触发流程其实是在struts2运行主线的第一阶段，并没有到达第二阶段。什么意思呢，看下图：
+
+<img src="pic/struts2_s2-016_2.png">
+
+如上图，这是一个正常的`action`请求的处理时序图。
+
+首先第一阶段是对HTTP请求的预处理阶段。这个阶段主要由Struts2完成，其主要职责是与Web容器打交道，将HTTP请求处理成为普通的Java对象。<br>
+而第二阶段，则是XWork事件处理阶段。程序的执行控制权在此时交给了XWork框架，其主要职责是对请求进行核心逻辑处理。
+
+为什么说这个漏洞的触发流程只是在struts2运行主线的第一阶段呢？来实际调试一下便知。
+
+struts2接收到请求后，先到达`StrutsPrepareAndExecuteFilter#doFilter()`方法中，在该方法中，会根据`request`对象来获取`ActionMapping`对象，如下图：
+
+<img src="pic/struts2_s2-016_4.png">
+
+在获取`ActionMapping`对象的过程中，会调用`DefaultActionMapper#handleSpecialParameters()`方法去处理特殊的参数
+，比如包含了`redirect:`、`redirectAction:`等前缀的参数，具体的处理动作在对应的`ParameterAction#execute()`方法里完成，如下图：
+
+<img src="pic/struts2_s2-016_5.png">
+ 
+<img src="pic/struts2_s2-016_6.png">
+
+可以看到，在`redirect:`前缀对应的处理动作中，往`ActionMapping`对象中放置了一个`Result`对象：`ServletRedirectResult`对象，并且将前缀后面的OGNL表达式字符串赋值给该`Result`对象的`location`属性中。
+
+获取到`ActionMapping`属性后，随着运行主线的第一阶段，到达`Dispatcher#serviceAction()`方法。在该方法中，会判断在`ActionMapping`对象的`result`属性是否为`null`，如果为`null`，则进入运行主线的第二阶段。然而，前面已经在处理`redirect:`参数前缀时，将一个`ServletRedirectResult`对象赋值给了`ActionMapping`的`result`属性，所以这里不会进入第二阶段，而是直接开始调度`Result`对象。
+
+<img src="pic/struts2_s2-016_7.png">
+
+继续跟进，看到了熟悉的`TextParseUtil.translateVariables()`方法。后面的方法执行流程就跟`S2-015:vuln-1`一样了，这里不再展开。
 
 ### 可回显PoC
 
+```
+xxx.action?redirect:%{#context['xwork.MethodAccessor.denyMethodExecution']=false,
+#f=#_memberAccess.getClass().getDeclaredField('allowStaticMethodAccess'),
+#f.setAccessible(true),
+#f.set(#_memberAccess,true),
+#a=@org.apache.commons.io.IOUtils@toString(@java.lang.Runtime@getRuntime().exec('id').getInputStream()),
+#wr=#context.get('com.opensymphony.xwork2.dispatcher.HttpServletResponse').getWriter(),
+#wr.println(#a),#wr.flush(),#wr.close()}
+```
 
+<img src="pic/struts2_s2-016_8.png">
 
 ## 漏洞修复
+
+通过版本代码比对，在Struts2 `2.3.15.1`版本中，`DefaultActionMapper`类里对`redirect:`、`redirectAction:`前缀的处理代码都删除了。
+
+<img src="pic/struts2_s2-016_9.png">
+ 
+<img src="pic/struts2_s2-016_10.png">
 
 <a name="s2-032"></a>
 ## S2-032
