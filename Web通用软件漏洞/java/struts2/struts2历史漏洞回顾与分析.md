@@ -853,7 +853,7 @@ https://cwiki.apache.org/confluence/display/WW/S2-013
 
 ## 漏洞复现与分析
 
-在Struts2中，支持在`action`的请求参数中添加`redirect:`、`redirectAction:`前缀，在后面加上指定表达式，便可实现路径导航和重定向。但由于没有对前缀后面的表达式进行安全过滤，从而可导致注入任意OGNL表达式而RCE。
+在Struts2中，支持在`action`的请求参数中添加`redirect:`、`redirectAction:`前缀，在后面加上指定表达式，便可实现路径导航和重定向。但由于没有对前缀后面的表达式进行安全过滤，从而可导致注入任意OGNL表达式。
 
 下面使用struts2 `2.3.15`版本自带的示例程序`struts-blank`进行调试分析。
 以`redirect:`为例，最简单的PoC`redirect:%{11+13}`，复现如下：
