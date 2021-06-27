@@ -687,10 +687,9 @@ https://cwiki.apache.org/confluence/display/WW/S2-012
 
 ## 漏洞修复
 
-根据漏洞公告中提到的修复方案，是将`OgnlUtil`这个类改为默认情况下不允许进行表达式求值。
-如代码所示，`OgnlUtil#compile()`方法中加了这样一个判断，而`enableEvalExpression`默认为`false`。
+通过比对代码，发现在`2.3.14.3`版本的`OgnlTextParser.java#evaluate()`方法里，将位置索引值`pos`的初始化移到了`for`循环之前。这样修改，使得第一次OGNL表达式计算后，起始位置`pos`的值会更新，而不会重新置`0`，从而避免了二次计算OGNL表达式。<br>
 
-<img src="pic/struts2_s2-012_7.png">
+<img src="pic/struts2_s2-015_14.png">
 
 <a name="s2-013"></a>
 ## S2-013
