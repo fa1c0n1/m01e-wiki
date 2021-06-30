@@ -922,15 +922,68 @@ xxx.action?redirect:%{#context['xwork.MethodAccessor.denyMethodExecution']=false
 <a name="s2-032"></a>
 ## S2-032
 
+官方漏洞公告：https://cwiki.apache.org/confluence/display/WW/S2-032
+
+影响版本：`Struts 2.3.20` - `Struts Struts 2.3.28 (except 2.3.20.3 and 2.3.24.3)`
+
 ## 漏洞复现与分析
 
+从漏洞公告可获悉，当Struts2的"动态方法调用"`(Dynamic Method Invocation)`特性被启用时，可通构造以`method:`为前缀的OGNL表达式，造成远程代码执行。
 
+下面使用struts2 `2.3.28`版本自带的示例程序`struts-blank`进行调试分析。
+
+在部署应用前，需要在`struts.xml`文件中启用`Dynamic Method Invocation`特性，同时需要将`devMode`模式关闭。至于为什么要关闭`devMode`模式，在下面的调试过程中就能找到答案。
+
+<img src="pic/struts2_s2-032_2.png">
+
+同`S2-016`的`redirect:`、`redirectAction:`前缀一样，对参数前缀`method:`的处理也是在类`org.apache.struts2.dispatcher.mapper.DefaultActionMapper`，如下图：
+
+按照前面在`S2-016`漏洞分析中提到的Struts2运行主线的流程，跟进到类`DefaultActionMapper`中对参数前缀为`method:`时的处理，如下图，只有当`Dynamic Method Invocation`特性启用时才会将`method:`后面带的字符串赋值到`ActionMapping`的`method`属性。
+
+<img src="pic/struts2_s2-032_3.png">
+
+继续跟进代码到`Dispatcher#serviceAction()`方法，发现在创建`ActionProxy`对象的过程中，会对传入的`method`字符串(即`method:`前缀后面跟着的字符串)进行HTML字符转义和JS字符转义(这个常用来防止XSS攻击)。因此这次我们构造PoC的时候就不能直接把之前漏洞的PoC拿来用了，得修改一下，比如不能出现单双引号、尖括号等。
+
+<img src="pic/struts2_s2-032_4.png">
+
+<img src="pic/struts2_s2-032_5.png">
+
+继续跟进代码，到了调度拦截器执行阶段，当拦截器`AnnotationValidationInterceptor`执行过程中，会搜索当前`action`对象中是否有`method:`前缀后指定的方法。因为这里我们就是要插入恶意OGNL表达式的，所以结果肯定是搜索不到的。当搜索不到时，当`devMode`开启时，就会抛出异常，程序因此中断从而无法执行我们注入的OGNL表达式，所以前面提到为什么前提条件还包括不开启`devMode`模式。如下图：
+
+<img src="pic/struts2_s2-032_6.png">
+
+<img src="pic/struts2_s2-032_7.png">
+
+<img src="pic/struts2_s2-032_8.png">
+
+最后，在调用`action`对象的时候，便会对`method:`前缀后面的OGNL表达式进行计算，如下图：
+
+<img src="pic/struts2_s2-032_9.png">
+
+这里要注意`OnglUtil.getValue()`的第一个参数，`methodName`后面拼接了一个圆括号`()`，故在构造PoC时，要在注入的OGNL表达式中，最后一个得是方法调用，且去掉圆括号。
 
 ### 可回显PoC
 
+从上面的调试分析可知，会对`method:`前缀后面的字符串进行HTML字符和JS字符转义，所以这里不能使用`#_memberAccess.getClass().getDeclaredField('allowStaticMethodAccess')`这种方式来访问`_memberAccess`的`allowStaticMethodAccess`属性，因为单引号会被转义。执行命令`Runtime#exec('id')`同理。
 
+这里使用`@ognl.OgnlContext@DEFAULT_MEMBER_ACCESS`将`#_memberAccess`重置为默认对象`DefaultMemberAccess`，`DefaultMemberAccess`不会禁止执行Java静态方法。
+
+而命令参数则利用上下文对象`context`中`parameters`属性去读取。
+
+综上，可回显PoC如下：
+```
+/xxxx.action?method:#_memberAccess=@ognl.OgnlContext@DEFAULT_MEMBER_ACCESS,
+#res=@org.apache.struts2.ServletActionContext@getResponse(),
+#w=#res.getWriter(),
+#w.println(@org.apache.commons.io.IOUtils@toString(@java.lang.Runtime@getRuntime().exec(#parameters.cmd[0]).getInputStream())),
+#w.flush(),
+#w.close&cmd=uname -a
+```
+
+<img src="pic/struts2_s2-032_1.png">
 
 ## 漏洞修复
+
 
 
 <a name="s2-045"></a>
