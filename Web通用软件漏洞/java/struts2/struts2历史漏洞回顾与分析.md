@@ -984,7 +984,9 @@ xxx.action?redirect:%{#context['xwork.MethodAccessor.denyMethodExecution']=false
 
 ## 漏洞修复
 
+通过版本比对，可以看到在Struts2 `2.3.28.1`版本中，对`method:`前缀后面的字符串进行了字符白名单校验，将不在白名单里的字符给去掉。新版本的关键修复代码如下图：
 
+<img src="pic/struts2_s2-032_10.png">
 
 <a name="s2-045"></a>
 ## S2-045
