@@ -1083,7 +1083,7 @@ xxx.action?redirect:%{#context['xwork.MethodAccessor.denyMethodExecution']=false
 
 <img src="pic/struts2_s2-045_11.png">
 
-对黑名单的读取和使用，是在`OgnlValueStack#setOgnlUtil()`方法中，如下图：
+对黑名单的读取，是在`OgnlValueStack#setOgnlUtil()`方法中，如下图：
 
 <img src="pic/struts2_s2-045_12.png">
 
@@ -1092,6 +1092,12 @@ xxx.action?redirect:%{#context['xwork.MethodAccessor.denyMethodExecution']=false
 先通过`#container=#context['com.opensymphony.xwork2.ActionContext.container']`来获取`ContainerImpl`对象，通过`ContainerImpl#getInstance()`方法来获取`OgnlUtil`对象，而`OgnlUtil`并不在黑名单中，所以再通过`#ognlUtil.getExcludedPackageNames().clear()`和`#ognlUtil.getExcludedClasses().clear()`来清空存储黑名单的集合。清除后，上下文对象`context`就可以调用`setMemberAccess()`方法去重置`_memberAccess`属性了。
 
 ## 漏洞修复
+
+在Struts2 `2.3.32`中，`JakartaMultiPartRequest#buildErrorMessage()`把异常信息传入了`LocalizedTextUtil#findText()`方法的`args`参数的位置，不再传到`defaultMessage`参数的位置。
+
+<img src="pic/struts2_s2-045_13.png">
+      
+<img src="pic/struts2_s2-045_14.png">
 
 
 <a name="s2-052"></a>
