@@ -1141,7 +1141,7 @@ java -cp marshalsec-0.0.3-SNAPSHOT-all.jar marshalsec.XStream ImageIO "/bin/bash
 
 ## 漏洞修复
 
-在`struts2-rest-plugin-2.3.34`版本中，将XStream升级到了`1.4.10`版本，且按照XStream官方的推荐(https://x-stream.github.io/security.html)，使用了白名单的方式指定可以反序列化的类型。
+在`struts2-rest-plugin-2.3.34`版本中，将XStream升级到了`1.4.10`版本，且按照XStream官方的推荐(hxxps://x-stream.github.io/security.html)，使用了白名单的方式指定可以反序列化的类型。
 
 <img src="pic/struts2_s2-052_7.png">
 
