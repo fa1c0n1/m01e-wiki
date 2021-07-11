@@ -1215,7 +1215,7 @@ java -cp marshalsec-0.0.3-SNAPSHOT-all.jar marshalsec.XStream ImageIO "/bin/bash
 
 **但！很遗憾**，这个修复可以被轻易绕过，因为修复后的代码中，`OgnlUtil`类里的`excludedPackageNames`和`excludedClasses`属性，只是它引用的集合对象是一个不可修改的对象，故可通过它们的`setter`方法，将其引用到一个空集合对象即可。
 
-这里直接放结论：将在上面的可回显PoC稍加修改，然后连续执行两次，便可在修复后的Struts2 `2.5.12`版本getshell！至于为什么需要执行两次才行，这个留到分析S2-057漏洞时再好好说道。
+这里直接放结论：将在上面的可回显PoC稍加修改，然后**连续执行两次**，便可在修复后的Struts2 `2.5.12`版本getshell！至于为什么需要执行两次才行，这个留到分析S2-057漏洞时再好好说道。
 修改后的PoC如下：
 
 ```
