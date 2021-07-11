@@ -22,6 +22,7 @@
 - [S2-057](#s2-057)
 - [S2-059](#s2-059)
 - [S2-061](#s2-061)
+- [Reference](#reference)
 
 <a name="preface"></a>
 ## 前言
@@ -1282,4 +1283,12 @@ java -cp marshalsec-0.0.3-SNAPSHOT-all.jar marshalsec.XStream ImageIO "/bin/bash
 
 
 ## 漏洞修复
+
+
+<a name="reference"></a>
+## Reference
+[1] hxxp://vulapps.evalbug.com/tags/#struts2
+[2] hxxps://github.com/vulhub/vulhub/tree/master/struts2
+[3] hxxps://securitylab.github.com/research/ognl-apache-struts-exploit-CVE-2018-11776/
+[4] 《Struts2技术内幕：深入解析Struts2架构设计与实现原理》- 作者:陆舟
 
