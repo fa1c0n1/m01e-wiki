@@ -1208,7 +1208,10 @@ java -cp marshalsec-0.0.3-SNAPSHOT-all.jar marshalsec.XStream ImageIO "/bin/bash
 
 ## 漏洞修复
 
+通过版本代码比对发现，Struts2 `2.5.12`版本做了很多改动。但通过调试发现，针对这个漏洞，最关键的修复代码在于将`OgnlUtil`类里的黑名单集合`excludedPackageNames`和`excludedClasses`都由原来的`HashSet`改为不可修改的集合类`Collections$UnmodifiableSet`来替代，从而使得S2-045的exploit失效了。
+如下图所示：
 
+<img src="pic/struts2_s2-053_9.png">
 
 <a name="s2-057"></a>
 ## S2-057
