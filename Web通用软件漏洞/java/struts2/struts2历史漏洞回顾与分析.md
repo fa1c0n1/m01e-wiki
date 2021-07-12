@@ -1246,15 +1246,103 @@ java -cp marshalsec-0.0.3-SNAPSHOT-all.jar marshalsec.XStream ImageIO "/bin/bash
 <a name="s2-057"></a>
 ## S2-057
 
+官方漏洞公告：https://cwiki.apache.org/confluence/display/WW/S2-057
+
+影响版本：`Struts 2.0.4` - `Struts 2.3.34`, `Struts 2.5` - `Struts 2.5.16`
+
 ## 漏洞复现与分析
 
+从漏洞公告可获悉，该漏洞有两个前提条件，如下
+- `alwaysSelectFullNamespace`为`true`;
+- `struts.xml`文件中，没有对`action`对象的上层(即`package`标签)设置`namespace`属性，或者`namespace`属性使用了通配符。
 
+满足这两个前提条件的情况下，存在4个攻击向量：
+- `ServletActionRedirectResult`：对应的result type为：`redirectAction`；
+- `ActionChainResult`：对应的result type为：`ActionChainResult`;
+- `PostbackResult`：对应的result type为：`postback`;
+- `ServletUrlRenderer`：对应`<s:url>`标签的处理。
+
+这里仅以`ServletActionRedirectResult`为例进行调试分析，其他3个分析起来差不多。
+
+下面使用docker镜像`medicean/vulapps:s_struts2_s2-057`进行调试分析。该环境使用的是Struts2 `2.5.16`版本。
+
+如下图，应用开启了`alwaysSelectFullNamespace`特性，action对象`actionChain1`的`result`对象的类型设置为`redirectAction`，且`package`没有设置`namespace`属性。
+
+<img src="pic/struts2_s2-057_2.png">
+
+<img src="pic/struts2_s2-057_3.png">
+
+简单表达式执行PoC如下：
+```
+hxxp://host:port/S2-057/${123+456}/actionChain1.action
+```
+访问后，跳转的Url如下：
+```
+hxxp://host:port/S2-057/579/register2.action
+```
+
+当`alwaysSelectFullNamespace`特性开启时，`namespace`的值会从`uri`中去获取，如下图：
+
+<img src="pic/struts2_s2-057_4.png">
+
+后面在处理`Result`对象时，在`ServletActionRedirectResult#execute()`方法中，获取前面得到的`namespace`的值，即表达式`${123+456}`，然后与`result`指定的`action`名进行字符串拼接，拼接后的字符串赋值给`ServletActionRedirectResult#location`属性，如下图：
+
+<img src="pic/struts2_s2-057_5.png">
+
+继续跟进代码，在`StrutsResultSupport#conditionalParse()`方法中看到熟悉的`TextParseUtil#translateVariables()`方法调用。没错，后面的执行流程就和S2-012是一样的了，这里不再详述。
+
+<img src="pic/struts2_s2-057_6.png">
+
+下面重点说一下命令执行PoC的构造。
 
 ## 可回显PoC
 
+因为在Struts2 `2.5.16`(依赖的ognl版本为`3.1.15`)中，`OgnlContext`的`get()`方法已经不支持传入`OgnlContext.CONTEXT_CONTEXT_KEY`常量，故无法像以前一样在OGNL表达式中使用`#context`直接访问上下文对象`context`。
 
+因此，我们需要找另外的方式先去获取`context`上下文对象，参考文章[3]中提出通过上下文对象内部集合里的`attr`对象来获取`context`上下文对象。因为`attr`是可以使用`#attr`去访问的，它是一个`AttributeMap`对象。如下图：
+
+<img src="pic/struts2_s2-057_7.png">
+
+从`AttributeMap#get()`方法可以看到，其实它会去上下文对象`context`内部存放的`request`、`session`、`application`对象去查值。其中，通过`request.get("struts.valueStack")`便可获取值栈`OgnlValueStack`，而`OgnlValueStack`对象中又存在指向上下文对象的属性。
+
+<img src="pic/struts2_s2-057_8.png">
+
+因此，便可通过`#request['struts.valueStack'].context`或`attr['struts.valueStack'].context`来获取上下文对象。
+
+接着，再配合前面S2-053的修复绕过，即利用`setter`方法将指向黑名单集合的属性值`excludedClass`和`excludedPackageNames`指向一个空的集合。
+
+综上可得，命令执行可回显的PoC如下：
+
+```
+${
+(#dm=@ognl.OgnlContext@DEFAULT_MEMBER_ACCESS).
+(#ct=#request['struts.valueStack'].context).
+(#cr=#ct['com.opensymphony.xwork2.ActionContext.container']).
+(#ou=#cr.getInstance(@com.opensymphony.xwork2.ognl.OgnlUtil@class)).
+(#ou.setExcludedPackageNames('')).(#ou.setExcludedClasses('')).
+(#ct.setMemberAccess(#dm)).
+(#a=@java.lang.Runtime@getRuntime().exec('id')).
+(@org.apache.commons.io.IOUtils@toString(#a.getInputStream()))
+}
+```
+
+但为什么执行第一次的时候无效呢？
+
+是因为PoC里改的是`OgnlUtil`对象里的`excludedClass`和`excludedPackageNames`，而实际进行黑名单校验时，是在安全管理器`SecurityMemberAccess`中进行的，使用的也是`SecurityMemberAccess`中的`excludedClass`和`excludedPackageNames`属性。
+
+为什么执行第二次就可以了呢？
+
+是因为每次请求，在`OgnlValueStack#setOgnlUtil()`方法中，`SecurityMemberAccess`都会从`OgnlUtil`中获取类和包名黑名单，并通过`setter`方法赋值到自身的属性`excludedClass`和`excludedPackageNames`。如下图：
+
+<img src="pic/struts2_s2-057_9.png">
+
+因为第一次请求，我们已经将`OgnlUtil`的`excludedClass`和`excludedPackageNames`给指向了空的集合。所以第二次请求，`SecurityMemberAccess`从`OgnlUtil`获取到的黑名单也因此变成了空的集合。从而实现了绕过。
+
+<img src="pic/struts2_s2-057_1.png">
 
 ### 漏洞修复
+
+
 
 
 <a name="s2-059"></a>
@@ -1290,5 +1378,6 @@ java -cp marshalsec-0.0.3-SNAPSHOT-all.jar marshalsec.XStream ImageIO "/bin/bash
 [1] hxxp://vulapps.evalbug.com/tags/#struts2 <br>
 [2] hxxps://github.com/vulhub/vulhub/tree/master/struts2 <br>
 [3] hxxps://securitylab.github.com/research/ognl-apache-struts-exploit-CVE-2018-11776/ <br>
-[4] 《Struts2技术内幕：深入解析Struts2架构设计与实现原理》- 作者:陆舟
+[4] hxxps://securitylab.github.com/research/apache-struts-CVE-2018-11776/ <br>
+[5] 《Struts2技术内幕：深入解析Struts2架构设计与实现原理》- 作者:陆舟 <br>
 
