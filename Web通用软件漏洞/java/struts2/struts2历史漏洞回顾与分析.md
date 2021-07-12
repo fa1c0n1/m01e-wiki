@@ -1342,8 +1342,11 @@ ${
 
 ### 漏洞修复
 
+在Struts2 `2.5.17`版本中，`DefaultActionMapping`在获取`namespace`时增加了正则匹配字符白名单的校验。
 
-
+<img src="pic/struts2_s2-057_10.png">
+   
+<img src="pic/struts2_s2-057_11.png">
 
 <a name="s2-059"></a>
 ## S2-059
