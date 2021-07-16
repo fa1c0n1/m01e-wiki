@@ -1,6 +1,7 @@
 # struts2历史高危漏洞分析
 
-原文连载地址：https://github.com/fa1c0n1/m01e-wiki/blob/main/Web%E9%80%9A%E7%94%A8%E8%BD%AF%E4%BB%B6%E6%BC%8F%E6%B4%9E/java/struts2/struts2%E5%8E%86%E5%8F%B2%E6%BC%8F%E6%B4%9E%E5%9B%9E%E9%A1%BE%E4%B8%8E%E5%88%86%E6%9E%90.md
+原文连载地址：https://github.com/fa1c0n1/m01e-wiki/blob/main/Web%E9%80%9A%E7%94%A8%E8%BD%AF%E4%BB%B6%E6%BC%8F%E6%B4%9E/java/struts2/struts2%E5%8E%86%E5%8F%B2%E9%AB%98%E5%8D%B1%E6%BC%8F%E6%B4%9E%E5%88%86%E6%9E%90.md
+
 
 ## 目录
 
@@ -1474,9 +1475,11 @@ public class IndexAction extends ActionSupport {
 
 **2、`OgnlRuntime#getStaticField()`方法也引入了Struts2的沙盒保护**
 
-Struts2 `2.5.16`版本所依赖的`ognl`库的版本为`3.1.15`，Struts2 `2.5.20`版本依赖的`ognl`库的版本为`3.1.21`。在`ognl-3.1.21`的类`OgnlRuntime#getStaticField()`中也引入了Struts2的沙盒进行保护，禁止黑名单类去获取静态属性。关键代码如下：
+Struts2 `2.5.16`版本所依赖的`ognl`库的版本为`3.1.15`，Struts2 `2.5.20`版本依赖的`ognl`库的版本为`3.1.21`。在`ognl-3.1.21`的类`OgnlRuntime#getStaticField()`中也引入了Struts2的沙盒进行保护，禁止黑名单类去获取静态属性，关键代码如下：
 
 <img src="pic/struts2_s2-059_9.png">
+
+这将导致无法通过表达式`@ognl.OgnlContext@DEFAULT_MEMBER_ACCESS`获取`OgnlContext`类的静态属性`DEFAULT_MEMBER_ACCESS`。
 
 
 ## 漏洞修复
