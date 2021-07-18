@@ -1508,7 +1508,7 @@ Struts2 `2.5.22`版本并没有对漏洞点进行修复，而是在`2.5.20`版�
 由于沙盒的增强，我们无法像之前一样轻易的获取上下文对象`context`：
 - `OgnlContext`删除了`CONTEXT_CONTEXT_KEY`这个`key`，故无法通过`OgnlContext#get()`方法，即通过`#context`获取上下文对象;
 - 包名黑名单中包含`com.opensymphony.xwork2.ognl.`，故无法通过`#request['struts.valueStack'].context`或`attr['struts.valueStack'].context`获取上下文对象。
-- 包名黑名单中包含`ognl.`，且`OgnlRuntime`类引入了沙盒保护，因此如果即使获得上下文对象`context`，也无法通过OGNL表达式直接操作它的属性和方法，只能通过间接的方式。
+- 包名黑名单中包含`ognl.`，且`OgnlRuntime`类引入了沙盒保护，因此即使获得上下文对象`context`，也无法通过OGNL表达式直接操作它的属性和方法，只能通过间接的方式。
 
 因此只能通过调试看看上下文对象`OgnlContext`中还有什么其他可利用的对象，来间接获取上下文对象。
 这里使用`#application`来获取`OgnlContext`内部`Map`集合中的`ApplicationMap`对象。`ApplicationMap`内部存放了整个应用实例的一些对象，比如这里通过键`org.apache.tomcat.InstanceManager`来获取Tomcat中的`DefaultInstanceManager`对象。
@@ -1529,7 +1529,7 @@ Struts2 `2.5.22`版本并没有对漏洞点进行修复，而是在`2.5.20`版�
 
 而`BeanMap#get()`则是获取当前`bean`的指定的`getter`方法。
 
-到此便可使用以下表达式获取上下文对象`context`：
+便可使用以下表达式获取上下文对象`context`：
 ```
 (#instancemanager=#application['org.apache.tomcat.InstanceManager']).
 (#stack=#request['struts.valueStack']).
