@@ -73,7 +73,20 @@ static final int hash(Object key) {
 
 ![](pic/ysoserial-urldns-9.png)
 
-#### 小结
+### 问题1
+
+为什么`SilentURLStreamHandler`继承`URLStreamHandler`后，要重写`openConnection`和`getHostAddress`方法且为空操作？
+
+因为在payload生成的时候，会调用`HashMap#put()`方法，`key`为`URL`对象。所以后面也会调用`URL#hashCode()`方法。因此为了避免在payload生成的时候就发起DNS请求，所以这里将`SilentURLStreamHandler`类重写的`openConnection`和`getHostAddress`方法作空操作处理。
+
+也许你会有疑问：这样的话，反序列化的时候不就不会发起HTTP请求了吗？
+
+不会的，因为`URL`中的`handler`属性是被`transient`关键字修饰的，所以payload生成的过程中，`SilentURLStreamHandler`并不会被序列化。所以反序列化的时候调用的还是`URLStreamHandler#getHostAddress()`方法。
+
+这样的话，既让payload生成的时候不会发起DNS请求，又让payload被反序列化的时候能发起DNS请求。(真的很巧妙啊^_^)
+
+
+### 小结
 
 下面再回顾下`URLDNS` payload的反序列化过程：
 
