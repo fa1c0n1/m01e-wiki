@@ -18,9 +18,12 @@
 ## 0x01 漏洞分析和复现
 
 
-<iframe src="//player.bilibili.com/player.html?aid=292240694&bvid=BV12f4y1V73i&cid=384406848&page=1" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true"> </iframe>
+<iframe width="100%" height="100%" src="//player.bilibili.com/player.html?aid=52012946&cid=91055960&page=1" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true"> </iframe>
 
-
+来源: 洪卫の博客
+作者: 洪卫
+文章链接: https://sunhwee.com/posts/7e1e06e9.html
+本文章著作权归作者所有，任何形式的转载都请注明出处。
 
 
 ## 0x02 编写CodeQL规则来检测漏洞
