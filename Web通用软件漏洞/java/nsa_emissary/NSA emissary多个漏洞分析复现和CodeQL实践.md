@@ -34,10 +34,40 @@
 
 ### Arbitrary File Disclosure (CVE-2021-32093) 
 
+漏洞发生在接口`/emissary/ConfigFile.action`，该接口没有对传入的参数`ConfigItem`做任何安全校验和过滤，导致可读取服务器上任意文件。关键代码如下：
+
+<img src="pic/emissary_3.png">
+
+<img src="pic/emissary_4.png">
+
+示例如下，读取系统文件，及读取emissary的配置文件获取用户名/密码：
+
+<img src="pic/emissary_5.png">
+
+<img src="pic/emissary_6.png">
 
 
 ### Code Injection (CVE-2021-32096)
 
+该漏洞出现在接口`/emissary/Console.action`，该接口允许用户执行Ruby代码。关键代码如下：
+
+<img src="pic/emissary_8.png">
+
+<img src="pic/emissary_9.png">
+
+<img src="pic/emissary_10.png">
+
+严格来说，这个是emissary提供的功能，不应该算漏洞。另外，该接口需要登录后才能调用。但由于emissary的用户认证使用的是HTTP摘要认证(HTTP Digest authentication)(参考[3])，在浏览器端登录后的HTTP请求，会自动带上请求头`Authorization`，如下：
+
+```
+GET / HTTP/1.1
+Host: 192.168.3.56:8001
+Authorization: Digest username="emissary", realm="EmissaryRealm", nonce="6GNGeEbPjv0BCgLtxLiqHifkF1eNRMM3", uri="/", algorithm=MD5, response="daa5a9a9144b7665f5ff1f5585d3432f", qop=auth, nc=00000001, cnonce="9f3c3b06c42dba3b"
+```
+
+这种认证方式可以被CSRF攻击。所以可构造页面让登录用户去访问，然后获取反弹shell，如下图演示：
+
+<img src="pic/emissary_7.gif">
 
 
 ### Unsafe deserialization (CVE-2021-32634)
@@ -56,3 +86,4 @@
 
 [1] https://blog.sonarsource.com/code-vulnerabilities-in-nsa-application-revealed <br>
 [2] https://securitylab.github.com/research/NSA-emissary/ <br>
+[3] https://blog.csdn.net/andrewpj/article/details/45727853
