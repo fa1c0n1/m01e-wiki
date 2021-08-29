@@ -2,7 +2,7 @@
 
 ## 0x00 前言
 
-先是Sonarsource的安全研究员在审计NSA的开源项目emissary的过程中发现了若干漏洞，其中包括：
+先是Sonarsource的安全研究员在审计NSA的开源项目emissary v5.9.0版本的过程中发现了若干漏洞，其中包括：
 - Code Injection (CVE-2021-32096)
 - Arbitrary File Upload (CVE-2021-32094)
 - Arbitrary File Disclosure (CVE-2021-32093)
@@ -13,7 +13,7 @@
 - Unsafe deserialization (CVE-2021-32634)
 - Server-side request forgery (CVE-2021-32639)
 
-最近除了在做漏洞分析外，也在学习CodeQL的使用，刚好可以用emissary项目来练手。
+最近笔者除了在做漏洞分析外，也在学习CodeQL的使用，刚好可以用emissary项目来练手。
 
 ## 0x01 漏洞分析和复现
 
@@ -72,13 +72,27 @@ Authorization: Digest username="emissary", realm="EmissaryRealm", nonce="6GNGeEb
 
 ### Unsafe deserialization (CVE-2021-32634)
 
+该漏洞发生在接口`/emissary/WorkSpaceClientEnqueue.action`，代码如下图：
 
+<img src="pic/emissary_11.png">
+
+可以看到参数`WorkSpaceAdapter.WORK_BUNDLE_OBJ`在第52、53行被读取并反序列化。而且emissary依赖了`commons-collections-3.2.1`，所以可以使用`ysoserial`生成`CC`链的payload进行反序列化攻击。由于这个接口也是登录后才可调用，因此可配合CSRF进行利用。
 
 ### Server-side request forgery (CVE-2021-32639)
 
+这里有两个接口存在SSRF漏洞，分别是`/emissary/RegisterPeer.action`和`/emissary/AddChildDirectory.action`。
+
+#### /RegisterPeer.action
 
 
-## 0x02 编写CodeQL规则来检测漏洞
+
+
+#### /AddChildDirectory.action
+
+
+
+## 0x02 使用CodeQL来检测漏洞
+
 
 
 
