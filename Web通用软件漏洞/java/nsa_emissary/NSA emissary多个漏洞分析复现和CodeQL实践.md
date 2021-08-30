@@ -125,7 +125,7 @@ class NotifyWaitTaintStep extends TaintTracking::AdditionalTaintStep {
 }
 ```
 
-可将这段代码添加到CodeQL默认代码注入规则文件`ql/java/ql/src/experimental/Security/CWE/CWE-094/ScriptInjection.ql`中，再运行查询，就能检测出该漏洞了，如下图：
+可将这段代码添加到CodeQL默认的代码注入规则文件`ql/java/ql/src/experimental/Security/CWE/CWE-094/ScriptInjection.ql`中，再运行查询，就能检测出该漏洞了，如下图：
 
 <img src="pic/emissary_25.png">
 
