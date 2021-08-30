@@ -57,7 +57,7 @@
 
 <img src="pic/emissary_10.png">
 
-严格来说，这个是emissary提供的功能。另外，该接口需要登录后才能调用。但由于emissary的用户认证使用的是HTTP摘要认证(HTTP Digest authentication)(参考[3])，在浏览器端登录后的HTTP请求，会自动带上请求头`Authorization`，如下：
+这个是emissary提供的功能。另外，该接口需要登录后才能调用。但由于emissary的用户认证使用的是HTTP摘要认证(HTTP Digest authentication)(参考[3])，在浏览器端登录后的HTTP请求，会自动带上请求头`Authorization`，如下：
 
 ```
 GET / HTTP/1.1
@@ -65,7 +65,7 @@ Host: 192.168.3.56:8001
 Authorization: Digest username="emissary", realm="EmissaryRealm", nonce="6GNGeEbPjv0BCgLtxLiqHifkF1eNRMM3", uri="/", algorithm=MD5, response="daa5a9a9144b7665f5ff1f5585d3432f", qop=auth, nc=00000001, cnonce="9f3c3b06c42dba3b"
 ```
 
-这种认证方式可以被CSRF攻击。所以可构造页面让登录用户去访问，然后获取反弹shell，如下图演示：
+这种认证方式可以被CSRF攻击。所以可构造页面让登录用户去访问，从而获取反弹shell，如下图演示：
 
 <img src="pic/emissary_7.gif">
 
