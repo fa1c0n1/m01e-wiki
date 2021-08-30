@@ -13,6 +13,8 @@
 - Unsafe deserialization (CVE-2021-32634)
 - Server-side request forgery (CVE-2021-32639)
 
+(PS: 以上漏洞均已经在emissary新版本修复)
+
 最近笔者除了在做漏洞分析外，也在学习CodeQL的使用，刚好可以用emissary项目来练手。
 
 ## 0x01 漏洞分析和复现
@@ -35,7 +37,7 @@
 
 <img src="pic/emissary_17.png">
 
-而如果使用较旧的版本(应该是今年6月份以前的版本)，使用默认的规则集无法检测出该XSS，看CodeQL对应的提交记录，应该是之前没有考虑到响应类型为：`application/xml`，从而导致漏报。另外，还针对XSS的误报方面进行了改进，忽略了响应类型为`application/json`的情况。对应的改进实现见：[XSS改进](https://github.com/github/codeql/pull/6162/commits)
+而如果使用较旧的版本(应该是今年6月份以前的版本)，使用默认的规则集无法检测出该XSS，看CodeQL对应的提交记录，应该是之前没有考虑到响应类型为：`application/xml`，从而导致漏报(个人愚见，不一定对...)。另外，还针对XSS的误报方面进行了改进，忽略了响应类型为`application/json`的情况。对应的改进实现见：[XSS改进](https://github.com/github/codeql/pull/6162/commits)
 
 ### Arbitrary File Disclosure (CVE-2021-32093) 
 
