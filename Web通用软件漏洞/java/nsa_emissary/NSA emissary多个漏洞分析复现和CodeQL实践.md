@@ -13,8 +13,6 @@
 - Unsafe deserialization (CVE-2021-32634)
 - Server-side request forgery (CVE-2021-32639)
 
-(PS: 以上漏洞均已经在emissary新版本修复)
-
 最近笔者除了在做漏洞分析外，也在学习CodeQL的使用，刚好可以用emissary项目来练手。
 
 ## 0x01 漏洞分析和复现
