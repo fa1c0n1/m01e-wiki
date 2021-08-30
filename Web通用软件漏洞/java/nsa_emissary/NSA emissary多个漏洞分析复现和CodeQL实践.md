@@ -35,6 +35,7 @@
 
 <img src="pic/emissary_17.png">
 
+而如果使用较旧的版本(应该是今年6月份以前的版本)，使用默认的规则集无法检测出该XSS，看CodeQL对应的提交记录，应该是之前没有考虑到响应类型为：`application/xml`，从而导致漏报。另外，还针对XSS的误报方面进行了改进，忽略了响应类型为`application/json`的情况。对应的改进实现见：[XSS改进](https://github.com/github/codeql/pull/6162/commits)
 
 ### Arbitrary File Disclosure (CVE-2021-32093) 
 
@@ -77,6 +78,52 @@ Authorization: Digest username="emissary", realm="EmissaryRealm", nonce="6GNGeEb
 
 <img src="pic/emissary_7.gif">
 
+这个漏洞，使用目前CodeQL的默认规则集是检测不出来的，尽管默认规则集确实已覆盖了`javax.script.ScriptEngine.eval()`，所以应该是因为某种原因导致`source`和`sink`之间的通路断了。下面通过代码来分析下原因。
+
+<img src="pic/emissary_21.png">
+
+`getOrCreateConsole(request)` 将调用 `RubyConsole.getConsole()`，其实现如下：
+
+<img src="pic/emissary_22.png">
+
+这里会启动一个线程，线程执行的代码见`RubyConsole.run()`:
+
+<img src="pic/emissary_23.png">
+
+- 当调用 ruby​​ConsolePost 方法时，`RubyConsole.run()`由于 `stringToEval`为null，所以执行`wait()`立马使当前线程进入挂起状态。
+
+然后再回到接口的执行方法`rubyConsolePost()`，后面会执行`console.evalAndWait()`去执行Ruby代码，其实现如下：
+
+<img src="pic/emissary_20.png">
+
+可以看到它的实现并不是直接显示调用`eval()`方法，而是将要执行的ruby代码字符串赋值给全局变量`stringToEval`，然后调用`notifyAll()`方法来唤醒所有等待状态的线程，所以`RubyConsole.run()`方法继续往下执行，调用`javax.script.ScriptEngine.eval()`去执行Ruby代码。
+
+<img src="pic/emissary_24.png">
+
+因此，使用默认的规则集检测的过程中，从`/Console.action`到`console.evalAndWait()`，由于`javax.script.ScriptEngine.eval()`没有在`console.evalAndWait()`里被调用，所以这个数据流就断了。所以检测的不出来。
+
+所以得通过编写CodeQL额外的污点步骤，把这个数据通路给连接起来。这里直接引用了@pwntester编写的CodeQL规则，如下：
+
+```
+class NotifyWaitTaintStep extends TaintTracking::AdditionalTaintStep {
+  override predicate step(DataFlow::Node n1, DataFlow::Node n2) {
+    exists(MethodAccess notify, MethodAccess wait, SynchronizedStmt notifySync, SynchronizedStmt waitSync |
+      notify.getMethod().hasQualifiedName("java.lang", "Object", ["notify", "notifyAll"]) and
+      notify.getAnEnclosingStmt() = notifySync and
+      wait.getMethod().hasQualifiedName("java.lang", "Object", "wait") and
+      wait.getAnEnclosingStmt() = waitSync and
+      waitSync.getExpr().getType() = notifySync.getExpr().getType() and
+      exists(AssignExpr write, FieldAccess read |
+        write.getAnEnclosingStmt() = notifySync and
+        write = n1.asExpr() and
+        read.getAnEnclosingStmt() = waitSync and
+        read.getField() = write.getDest().(FieldAccess).getField() and
+        read = n2.asExpr()
+      )
+    )
+  }
+}
+```
 
 ### Unsafe deserialization (CVE-2021-32634)
 
@@ -85,6 +132,8 @@ Authorization: Digest username="emissary", realm="EmissaryRealm", nonce="6GNGeEb
 <img src="pic/emissary_11.png">
 
 可以看到参数`WorkSpaceAdapter.WORK_BUNDLE_OBJ`在第52、53行被读取并反序列化。而且emissary依赖了`commons-collections-3.2.1`，所以可以使用`ysoserial`生成`CC`链的payload进行反序列化攻击。由于这个接口也是登录后才可调用，因此可配合CSRF进行利用。
+
+该漏洞使用CodeQL的默认规则集可以检测出来，如下图：
 
 <img src="pic/emissary_19.png">
 
