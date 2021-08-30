@@ -92,19 +92,19 @@ Authorization: Digest username="emissary", realm="EmissaryRealm", nonce="6GNGeEb
 
 <img src="pic/emissary_23.png">
 
-- 当调用 ruby​​ConsolePost 方法时，`RubyConsole.run()`由于 `stringToEval`为null，所以执行`wait()`立马使当前线程进入挂起状态。
+当调用`ruby​​ConsolePost()` 方法时，`RubyConsole.run()`由于 `stringToEval`为null，会执行`wait()`立马使当前线程进入挂起状态。
 
-然后再回到接口的执行方法`rubyConsolePost()`，后面会执行`console.evalAndWait()`去执行Ruby代码，其实现如下：
+然后再回到接口的执行方法`rubyConsolePost()`，后面会执行`console.evalAndWait()`去执行Ruby代码：
 
 <img src="pic/emissary_20.png">
 
-可以看到它的实现并不是直接显示调用`eval()`方法，而是将要执行的ruby代码字符串赋值给全局变量`stringToEval`，然后调用`notifyAll()`方法来唤醒所有等待状态的线程，所以`RubyConsole.run()`方法继续往下执行，调用`javax.script.ScriptEngine.eval()`去执行Ruby代码。
-
 <img src="pic/emissary_24.png">
 
-因此，使用默认的规则集检测的过程中，从`/Console.action`到`console.evalAndWait()`，由于`javax.script.ScriptEngine.eval()`没有在`console.evalAndWait()`里被调用，所以这个数据流就断了。所以检测的不出来。
+可以看到`evalAndWait()`方法里并没有直接调用`eval()`方法，而是将要执行的ruby代码字符串赋值给全局变量`stringToEval`，然后调用`notifyAll()`方法来唤醒所有等待状态的线程，所以`RubyConsole.run()`方法继续往下执行，调用`javax.script.ScriptEngine.eval()`去执行Ruby代码。
 
-所以得通过编写CodeQL额外的污点步骤，把这个数据通路给连接起来。这里直接引用了@pwntester编写的CodeQL规则，如下：
+综上可判断：使用默认的规则集检测的过程中，从`/Console.action`到`console.evalAndWait()`，由于`javax.script.ScriptEngine.eval()`没有在`console.evalAndWait()`里被调用，所以这个数据流就断了。所以检测不出来。
+
+因此，得通过编写CodeQL额外的污点步骤，把这个数据通路给连接起来。这里直接引用了@pwntester编写的CodeQL规则，如下：
 
 ```
 class NotifyWaitTaintStep extends TaintTracking::AdditionalTaintStep {
@@ -126,6 +126,11 @@ class NotifyWaitTaintStep extends TaintTracking::AdditionalTaintStep {
   }
 }
 ```
+
+可将这段代码添加到CodeQL默认代码注入规则文件`ql/java/ql/src/experimental/Security/CWE/CWE-094/ScriptInjection.ql`中，再运行查询，就能检测出该漏洞了，如下图：
+
+<img src="pic/emissary_25.png">
+
 
 ### Unsafe deserialization (CVE-2021-32634)
 
@@ -183,7 +188,10 @@ SSRF一般用于未授权访问、扫描或攻击目标的内部网络。但是�
 
 `/AddChildDirectory.action`接口同理，就不展开说了。
 
+## 小结
 
+- CodeQL在一定程度上，依赖于安全人员的技术能力。但随着该项目的活跃，安全社区会有越来越多的人提交优质的CodeQL查询规则，来增强它的默认规则集。
+- 总之，CodeQL无论是在代码审计挖洞，还是分析Nday方面，都是非常值得学习的工具。
 
 ## Reference
 
