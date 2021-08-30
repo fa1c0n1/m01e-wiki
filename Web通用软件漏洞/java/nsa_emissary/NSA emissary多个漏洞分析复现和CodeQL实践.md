@@ -31,6 +31,10 @@
 
 <img src="pic/emissary_2.png">
 
+该漏洞使用CodeQL最新版本的默认规则集可以检测出来，如下图：
+
+<img src="pic/emissary_17.png">
+
 
 ### Arbitrary File Disclosure (CVE-2021-32093) 
 
@@ -45,6 +49,10 @@
 <img src="pic/emissary_5.png">
 
 <img src="pic/emissary_6.png">
+
+该漏洞使用CodeQL的默认规则集可以检测出来，如下图：
+
+<img src="pic/emissary_18.png">
 
 
 ### Code Injection (CVE-2021-32096)
@@ -77,6 +85,9 @@ Authorization: Digest username="emissary", realm="EmissaryRealm", nonce="6GNGeEb
 <img src="pic/emissary_11.png">
 
 可以看到参数`WorkSpaceAdapter.WORK_BUNDLE_OBJ`在第52、53行被读取并反序列化。而且emissary依赖了`commons-collections-3.2.1`，所以可以使用`ysoserial`生成`CC`链的payload进行反序列化攻击。由于这个接口也是登录后才可调用，因此可配合CSRF进行利用。
+
+<img src="pic/emissary_19.png">
+
 
 ### Server-side request forgery (CVE-2021-32639)
 
