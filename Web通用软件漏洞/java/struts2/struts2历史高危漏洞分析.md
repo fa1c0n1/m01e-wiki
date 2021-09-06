@@ -1,6 +1,9 @@
 # struts2历史高危漏洞分析
 
-原文连载地址：https://github.com/fa1c0n1/m01e-wiki/blob/main/Web%E9%80%9A%E7%94%A8%E8%BD%AF%E4%BB%B6%E6%BC%8F%E6%B4%9E/java/struts2/struts2%E5%8E%86%E5%8F%B2%E9%AB%98%E5%8D%B1%E6%BC%8F%E6%B4%9E%E5%88%86%E6%9E%90.md
+>文章首发于奇安信攻防社区: <br>
+https://forum.butian.net/share/601
+https://forum.butian.net/share/602
+https://forum.butian.net/share/603
 
 
 ## 目录

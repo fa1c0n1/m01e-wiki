@@ -1,5 +1,7 @@
 # NSA emissary多个漏洞分析复现和CodeQL实践
 
+>文章首发于奇安信攻防社区: https://forum.butian.net/share/604
+
 ## 0x00 前言
 
 先是Sonarsource的安全研究员在审计NSA的开源项目emissary v5.9.0版本的过程中发现了若干漏洞，其中包括：
